@@ -262,7 +262,6 @@ fun LineChart(records: List<ActivityRecord>, timeSpan: ChartTimeSpan, onEntrySel
 
     AndroidView(
         factory = { context ->
-            val formatter = DynamicDateAxisFormatter()
             LineChart(context).apply {
                 description.isEnabled = false
                 setDrawGridBackground(false)
@@ -274,7 +273,7 @@ fun LineChart(records: List<ActivityRecord>, timeSpan: ChartTimeSpan, onEntrySel
                     setDrawGridLines(false)
                     textColor = chartColor
                     axisLineColor = chartColor
-                    valueFormatter = formatter
+                    valueFormatter = DynamicDateAxisFormatter()
                     granularity = 1f
                     labelCount = if (timeSpan == ChartTimeSpan.WEEK) 7 else 12
                 }
@@ -327,7 +326,6 @@ fun BarChart(records: List<ActivityRecord>, timeSpan: ChartTimeSpan, onEntrySele
 
     AndroidView(
         factory = { context ->
-            val formatter = DynamicDateAxisFormatter()
             BarChart(context).apply {
                 description.isEnabled = false
                 setDrawGridBackground(false)
@@ -339,7 +337,7 @@ fun BarChart(records: List<ActivityRecord>, timeSpan: ChartTimeSpan, onEntrySele
                     setDrawGridLines(false)
                     textColor = chartColor
                     axisLineColor = chartColor
-                    valueFormatter = formatter
+                    valueFormatter = DynamicDateAxisFormatter()
                     granularity = 1f
                     labelCount = if (timeSpan == ChartTimeSpan.WEEK) 7 else 12
                 }

@@ -126,18 +126,20 @@ fun RemindersCard(
     val context = LocalContext.current
     var showWaterFrequencyDialog by remember { mutableStateOf(false) }
 
-    val timeFormatter = remember { DateTimeFormatter.ofPattern("HH:mm") }
-    val parsedTime = LocalTime.parse(pushupReminderTime, timeFormatter)
-
-    val timePickerDialog = TimePickerDialog(
-        context,
-        { _, hour: Int, minute: Int ->
-            onPushupReminderChanged(true, LocalTime.of(hour, minute))
-        },
-        parsedTime.hour,
-        parsedTime.minute,
-        true
-    )
+    fun showTimePicker() {
+        val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+        val parsedTime = try { LocalTime.parse(pushupReminderTime, timeFormatter) } catch (e: Exception) { LocalTime.now() }
+        
+        TimePickerDialog(
+            context,
+            { _, hour: Int, minute: Int ->
+                onPushupReminderChanged(true, LocalTime.of(hour, minute))
+            },
+            parsedTime.hour,
+            parsedTime.minute,
+            true
+        ).show()
+    }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -156,9 +158,9 @@ fun RemindersCard(
                 enabled = pushupReminderEnabled,
                 detail = pushupReminderTime,
                 onEnabledChange = {
-                    if (it) timePickerDialog.show() else onPushupReminderChanged(false, null)
+                    if (it) showTimePicker() else onPushupReminderChanged(false, null)
                 },
-                onClick = { if(pushupReminderEnabled) timePickerDialog.show() }
+                onClick = { if(pushupReminderEnabled) showTimePicker() }
             )
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -231,8 +233,3 @@ fun WaterFrequencyDialog(onDismiss: () -> Unit, onSelect: (Int) -> Unit) {
         }
     )
 }
-
-
-
-
-

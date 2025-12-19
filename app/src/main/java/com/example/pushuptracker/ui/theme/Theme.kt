@@ -66,7 +66,11 @@ fun PushupTrackerTheme(
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
+            // Enable edge-to-edge display
+            WindowCompat.setDecorFitsSystemWindows(window, false)
+            // Set status bar to transparent
             window.statusBarColor = Color.Transparent.toArgb()
+            // Set the status bar icons to be light or dark based on the theme
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
         }
     }

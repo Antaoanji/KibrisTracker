@@ -221,9 +221,10 @@ fun AddRecordDialog(
         },
         confirmButton = {
             Button(onClick = {
-                val value = input.toDoubleOrNull()
-                if (value != null && value > 0) {
-                    onSave(value)
+                input.toDoubleOrNull()?.let { value ->
+                    if (value > 0) {
+                        onSave(value)
+                    }
                 }
             }) {
                 Text(stringResource(R.string.save))
