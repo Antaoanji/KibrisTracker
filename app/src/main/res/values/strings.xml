@@ -1,0 +1,96 @@
+<resources>
+    <string name="app_name">Kibris Tracker</string>
+
+    <!-- Main Screen -->
+    <string name="today">Bugün</string>
+    <string name="yesterday">Dün</string>
+    <string name="goal_label">Hedef</string>
+    <string name="total">Toplam</string>
+    <string name="pushups">Şınav</string>
+    <string name="add_pushups">+ Şınav Ekle</string>
+    <string name="todays_total">Çekilen Şınav: %1$d / %2$d</string>
+    <string name="push_up_count">Şınav sayısı</string>
+    <string name="save">Kaydet</string>
+    <string name="water_tracker">Su Takibi</string>
+    <string name="statistics">İstatistikler</string>
+    <string name="programs">Programlar</string>
+    <string name="charts">Grafikler</string>
+    <string name="edit_data">Verileri Düzenle</string>
+    <string name="settings">Ayarlar</string>
+    <string name="achievements">Başarımlar</string>
+    <string name="home">Ana Sayfa</string>
+    <string name="profile">Profil</string>
+
+    <!-- Gamification -->
+    <string name="current_streak">Harika Gidiyorsun!\n%d Günlük Seri</string>
+    <string name="no_streak">Hadi Bugün Başlayalım!</string>
+    <string name="badge_streak_7_day_title">Azim Abidesi</string>
+    <string name="badge_streak_7_day_desc">7 gün üst üste hedefe ulaştın.</string>
+
+    <!-- Water Tracker Screen -->
+    <string name="todays_water_total">Bugünkü ilerleme: %1$d / %2$d ML</string>
+    <string name="water_drunk_ml">İçilen su (ML)</string>
+    <string name="add">Ekle</string>
+    <string name="remove">Çıkar</string>
+    <string name="new_day_reset">Yeni Gün (Sıfırla)</string>
+
+    <!-- Stats Screen -->
+    <string name="summary_stats">Özet İstatistikler</string>
+    <string name="yesterday_total">Dünkü Toplam: %1$d</string>
+    <string name="this_week_total">Bu Hafta Toplam: %1$d</string>
+    <string name="this_month_total">Bu Ay Toplam: %1$d</string>
+    <string name="all_time_stats">Tüm Zamanlar</string>
+    <string name="all_time_total">Toplam Şınav: %1$d</string>
+    <string name="total_days_tracked">Toplam Gün: %1$d</string>
+    <string name="daily_average">Günlük Ortalama: %1$d</string>
+    <string name="highest_day">En Yüksek Gün: %1$s</string>
+    <string name="no_stats_available">Gösterilecek istatistik verisi bulunamadı.</string>
+    <string name="no_stats_to_display_in_chart">Grafik için gösterilecek veri yok.</string>
+
+    <!-- Programs Screen -->
+    <string name="duration_weeks">Süre: %d Hafta</string>
+    <string name="days_per_week">Haftada %d Gün</string>
+
+    <!-- Chart Screen -->
+    <string name="weekly_chart">Haftalık Grafik</string>
+    <string name="monthly_chart">Aylık Grafik</string>
+    <string name="chart_type">Grafik Tipi</string>
+    <string name="select_date">Tarih Seç: %1$s</string>
+    <string name="switch_to_bar_chart">Çubuk Grafağa Geç</string>
+    <string name="switch_to_line_chart">Çizgi Grafiğe Geç</string>
+    <string name="daily_count">Günlük Sayı</string>
+    <string name="trend">Trend</string>
+    <string name="goal">Hedef</string>
+
+    <!-- Edit Data Screen (now PushupList) -->
+    <string name="delete_all_data">Tüm Verileri Sil</string>
+    <string name="are_you_sure_delete_all_data">Tüm şınav verilerini kalıcı olarak silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.</string>
+    <string name="date_label">Tarih: %1$s</string>
+    <string name="count_label">Sayı: %1$d</string>
+
+    <!-- Pushup Detail Screen -->
+    <string name="edit_details">Detayları Düzenle</string>
+    <string name="delete">Sil</string>
+    <string name="delete_entry_confirmation">%1$s tarihli kaydı silmek istediğinizden emin misiniz?</string>
+
+    <!-- Settings Screen -->
+    <string name="daily_pushup_goal">Günlük Şınav Hedefi</string>
+    <string name="current_goal">Mevcut Hedef: %1$d</string>
+    <string name="enter_new_goal">Yeni Hedef Gir</string>
+    <string name="daily_water_goal">Günlük Su İçme Hedefi</string>
+    <string name="current_water_goal">Mevcut Hedef: %1$d ML</string>
+    <string name="enter_new_water_goal">Yeni Hedef Gir (ML)</string>
+    <string name="reminders_title">Hatırlatıcılar</string>
+    <string name="pushup_reminder">Şınav Hatırlatıcısı</string>
+    <string name="water_reminder">Su İçme Hatırlatıcısı</string>
+    <string name="reminder_frequency">Hatırlatıcı Sıklığı</string>
+    <string name="hours_template">%1$d Saatte Bir</string>
+
+    <!-- Common -->
+    <string name="back">Geri</string>
+    <string name="ok">Tamam</string>
+    <string name="cancel">İptal</string>
+    <string name="confirm_deletion">Silme Onayı</string>
+    <string name="yes_delete">Evet, Sil</string>
+
+</resources>
