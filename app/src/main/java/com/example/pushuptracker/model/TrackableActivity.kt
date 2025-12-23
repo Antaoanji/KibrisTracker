@@ -5,7 +5,7 @@ import androidx.annotation.DrawableRes
 data class TrackableActivity(
     val id: String,
     val name: String,
-    @DrawableRes val imageRes: Int,
-    @DrawableRes val iconRes: Int,
+    @field:DrawableRes val imageRes: Int,
+    @field:DrawableRes val iconRes: Int,
     val unit: String
 )

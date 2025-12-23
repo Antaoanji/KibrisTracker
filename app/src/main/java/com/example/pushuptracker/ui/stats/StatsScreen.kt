@@ -22,8 +22,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.pushuptracker.R
 import com.example.pushuptracker.model.ActivityRecord
 import com.github.mikephil.charting.charts.BarChart
@@ -45,8 +45,8 @@ import java.util.Locale
 import kotlin.math.roundToInt
 
 @Composable
-fun StatsScreen(viewModel: StatsViewModel = viewModel()) {
-    val chartRecords by viewModel.chartRecords.collectAsStateWithLifecycle()
+fun StatsScreen(viewModel: StatsViewModel = hiltViewModel()) {
+    val chartRecords by viewModel.chartRecords.collectAsStateWithLifecycle(emptyList())
     val overallStats by viewModel.overallStats.collectAsStateWithLifecycle()
     val chartTimeSpan by viewModel.chartTimeSpan.collectAsStateWithLifecycle()
     val chartType by viewModel.chartType.collectAsStateWithLifecycle()

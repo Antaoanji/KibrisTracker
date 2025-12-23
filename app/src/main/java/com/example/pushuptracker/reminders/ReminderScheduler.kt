@@ -2,17 +2,25 @@ package com.example.pushuptracker.reminders
 
 import android.content.Context
 import androidx.work.*
+import dagger.hilt.android.qualifiers.ApplicationContext
 import java.time.Duration
 import java.time.LocalTime
 import java.time.ZonedDateTime
 import java.util.concurrent.TimeUnit
+import javax.inject.Inject
+import javax.inject.Singleton
 
-object ReminderScheduler {
+@Singleton
+class ReminderScheduler @Inject constructor(@ApplicationContext private val context: Context) {
 
-    private const val PUSHUP_REMINDER_TAG = "pushup_reminder_tag"
-    private const val WATER_REMINDER_TAG = "water_reminder_tag"
+    private val workManager = WorkManager.getInstance(context)
 
-    fun scheduleDailyPushupReminder(context: Context, time: LocalTime) {
+    private companion object {
+        const val PUSHUP_REMINDER_TAG = "pushup_reminder_tag"
+        const val WATER_REMINDER_TAG = "water_reminder_tag"
+    }
+
+    fun scheduleDailyPushupReminder(time: LocalTime) {
         val now = ZonedDateTime.now()
         var scheduleTime = now.with(time)
 
@@ -31,18 +39,18 @@ object ReminderScheduler {
             .addTag(PUSHUP_REMINDER_TAG)
             .build()
 
-        WorkManager.getInstance(context).enqueueUniqueWork(
+        workManager.enqueueUniqueWork(
             PUSHUP_REMINDER_TAG,
             ExistingWorkPolicy.REPLACE,
             workRequest
         )
     }
 
-    fun cancelPushupReminder(context: Context) {
-        WorkManager.getInstance(context).cancelUniqueWork(PUSHUP_REMINDER_TAG)
+    fun cancelPushupReminder() {
+        workManager.cancelUniqueWork(PUSHUP_REMINDER_TAG)
     }
 
-    fun schedulePeriodicWaterReminder(context: Context, repeatIntervalMinutes: Long) {
+    fun schedulePeriodicWaterReminder(repeatIntervalMinutes: Long) {
         val inputData = workDataOf(ReminderWorker.KEY_REMINDER_TYPE to ReminderWorker.TYPE_WATER)
 
         val workRequest = PeriodicWorkRequestBuilder<ReminderWorker>(
@@ -51,14 +59,14 @@ object ReminderScheduler {
             .setInputData(inputData)
             .build()
 
-        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+        workManager.enqueueUniquePeriodicWork(
             WATER_REMINDER_TAG,
             ExistingPeriodicWorkPolicy.UPDATE,
             workRequest
         )
     }
 
-    fun cancelWaterReminder(context: Context) {
-        WorkManager.getInstance(context).cancelUniqueWork(WATER_REMINDER_TAG)
+    fun cancelWaterReminder() {
+        workManager.cancelUniqueWork(WATER_REMINDER_TAG)
     }
 }

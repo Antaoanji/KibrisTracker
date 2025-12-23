@@ -1,20 +1,34 @@
 package com.example.pushuptracker.ui.profile
 
-import android.app.Application
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.pushuptracker.SettingsManager
 import com.example.pushuptracker.reminders.ReminderScheduler
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
+import javax.inject.Inject
 
-class ProfileViewModel(application: Application) : AndroidViewModel(application) {
+@HiltViewModel
+class ProfileViewModel @Inject constructor(
+    private val settingsManager: SettingsManager,
+    private val reminderScheduler: ReminderScheduler
+) : ViewModel() {
 
-    private val app = application
-    private val settingsManager = SettingsManager(application)
+    // User Profile
+    val age = settingsManager.ageFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 30)
+    val weight = settingsManager.weightFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 70)
+    val gender = settingsManager.genderFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "Male")
+    val goal = settingsManager.goalFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "Direnç Kazanma")
+    val workoutFrequency = settingsManager.workoutFrequencyFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "Orta Seviye")
 
     // Goals
     val dailyGoal = settingsManager.dailyGoalFlow
@@ -34,6 +48,11 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
     val waterReminderFrequency = settingsManager.waterReminderFrequencyFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 120)
 
+    fun saveAge(age: Int) = viewModelScope.launch { settingsManager.saveAge(age) }
+    fun saveWeight(weight: Int) = viewModelScope.launch { settingsManager.saveWeight(weight) }
+    fun saveGender(gender: String) = viewModelScope.launch { settingsManager.saveGender(gender) }
+    fun saveGoal(goal: String) = viewModelScope.launch { settingsManager.saveGoal(goal) }
+    fun saveWorkoutFrequency(frequency: String) = viewModelScope.launch { settingsManager.saveWorkoutFrequency(frequency) }
 
     fun saveDailyGoal(newGoal: Int) {
         viewModelScope.launch {
@@ -52,9 +71,9 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
             val newTime = time?.format(DateTimeFormatter.ofPattern("HH:mm")) ?: pushupReminderTime.value
             settingsManager.savePushupReminder(enabled, newTime)
             if (enabled) {
-                ReminderScheduler.scheduleDailyPushupReminder(app, LocalTime.parse(newTime))
+                reminderScheduler.scheduleDailyPushupReminder(LocalTime.parse(newTime))
             } else {
-                ReminderScheduler.cancelPushupReminder(app)
+                reminderScheduler.cancelPushupReminder()
             }
         }
     }
@@ -64,9 +83,9 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
             val newFrequency = frequencyMinutes ?: waterReminderFrequency.value
             settingsManager.saveWaterReminder(enabled, newFrequency)
             if (enabled) {
-                ReminderScheduler.schedulePeriodicWaterReminder(app, newFrequency.toLong())
+                reminderScheduler.schedulePeriodicWaterReminder(newFrequency.toLong())
             } else {
-                ReminderScheduler.cancelWaterReminder(app)
+                reminderScheduler.cancelWaterReminder()
             }
         }
     }

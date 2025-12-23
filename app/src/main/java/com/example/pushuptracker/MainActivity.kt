@@ -18,7 +18,9 @@ import androidx.navigation.compose.rememberNavController
 import com.example.pushuptracker.navigation.NavGraph
 import com.example.pushuptracker.navigation.Screen
 import com.example.pushuptracker.ui.theme.PushupTrackerTheme
+import dagger.hilt.android.AndroidEntryPoint
 
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

@@ -10,7 +10,7 @@ import androidx.compose.material.icons.outlined.EmojiEvents
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.example.pushuptracker.R
 
-sealed class Screen(val route: String, @StringRes val titleRes: Int, val icon: ImageVector) {
+sealed class Screen(val route: String, @field:StringRes val titleRes: Int, val icon: ImageVector) {
     object Home : Screen("home", R.string.home, Icons.Default.Home)
     object Programs : Screen("programs", R.string.programs, Icons.Default.DateRange)
     object Stats : Screen("stats", R.string.statistics, Icons.AutoMirrored.Filled.TrendingUp)

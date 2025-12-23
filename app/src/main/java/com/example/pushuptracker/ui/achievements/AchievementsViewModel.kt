@@ -1,34 +1,35 @@
 package com.example.pushuptracker.ui.achievements
 
-import android.app.Application
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.pushuptracker.SettingsManager
 import com.example.pushuptracker.model.Badge
-import com.example.pushuptracker.model.BadgesRepo
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import javax.inject.Inject
 
 data class AchievementsUiState(
-    val unlockedBadges: Set<String> = emptySet(),
-    val allBadges: List<Badge> = emptyList()
+    val allBadges: List<Badge> = emptyList(),
+    val unlockedBadges: Set<String> = emptySet()
 )
 
-class AchievementsViewModel(application: Application) : AndroidViewModel(application) {
+@HiltViewModel
+class AchievementsViewModel @Inject constructor(
+    settingsManager: SettingsManager
+) : ViewModel() {
 
-    private val settingsManager = SettingsManager(application)
+    private val allBadges = Badge.allBadges
 
-    val uiState: StateFlow<AchievementsUiState> = settingsManager.unlockedBadgesFlow.map {
-        unlockedBadges ->
+    val uiState = combine(settingsManager.unlockedBadgesFlow) { (unlockedBadges) ->
         AchievementsUiState(
-            unlockedBadges = unlockedBadges,
-            allBadges = BadgesRepo.allBadges
+            allBadges = allBadges,
+            unlockedBadges = unlockedBadges
         )
     }.stateIn(
-        viewModelScope,
-        SharingStarted.WhileSubscribed(5000),
-        AchievementsUiState()
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = AchievementsUiState()
     )
 }

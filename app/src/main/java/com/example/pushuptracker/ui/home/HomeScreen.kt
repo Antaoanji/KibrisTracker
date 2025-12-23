@@ -45,8 +45,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.airbnb.lottie.compose.LottieAnimation
 import com.airbnb.lottie.compose.LottieCompositionSpec
 import com.airbnb.lottie.compose.animateLottieCompositionAsState
@@ -57,7 +57,7 @@ import com.example.pushuptracker.model.TrackableActivity
 
 
 @Composable
-fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
+fun HomeScreen(viewModel: HomeViewModel = hiltViewModel()) {
     val currentStreak by viewModel.currentStreak.collectAsStateWithLifecycle(initialValue = 0)
     var showAddDialog by remember { mutableStateOf<TrackableActivity?>(null) }
     var showCelebration by remember { mutableStateOf(false) }
@@ -183,7 +183,7 @@ fun ActivityCard(
                     InfoColumn(title = stringResource(R.string.today), value = todayValue.toInt().toString())
                     InfoColumn(title = stringResource(R.string.yesterday), value = yesterdayValue.toInt().toString())
                     InfoColumn(title = stringResource(R.string.goal_label), value = dailyGoal.toString())
-                    InfoColumn(title = stringResource(R.string.total), value = total?.toInt()?.toString() ?: "0")
+                    InfoColumn(title = stringResource(R.string.total), value = total.toInt().toString())
                 }
             }
         }
@@ -237,4 +237,3 @@ fun AddRecordDialog(
         }
     )
 }
-

@@ -14,19 +14,25 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.pushuptracker.R
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
 @Composable
-fun ProfileScreen(viewModel: ProfileViewModel = viewModel()) {
+fun ProfileScreen(viewModel: ProfileViewModel = hiltViewModel()) {
     val dailyGoal by viewModel.dailyGoal.collectAsStateWithLifecycle()
     val dailyWaterGoal by viewModel.dailyWaterGoal.collectAsStateWithLifecycle()
     val pushupReminderEnabled by viewModel.pushupReminderEnabled.collectAsStateWithLifecycle()
     val pushupReminderTime by viewModel.pushupReminderTime.collectAsStateWithLifecycle()
     val waterReminderEnabled by viewModel.waterReminderEnabled.collectAsStateWithLifecycle()
     val waterReminderFrequency by viewModel.waterReminderFrequency.collectAsStateWithLifecycle()
+    val age by viewModel.age.collectAsStateWithLifecycle()
+    val weight by viewModel.weight.collectAsStateWithLifecycle()
+    val gender by viewModel.gender.collectAsStateWithLifecycle()
+    val goal by viewModel.goal.collectAsStateWithLifecycle()
+    val workoutFrequency by viewModel.workoutFrequency.collectAsStateWithLifecycle()
+
 
     Scaffold {
         padding ->
@@ -37,6 +43,9 @@ fun ProfileScreen(viewModel: ProfileViewModel = viewModel()) {
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            item {
+                UserProfileCard(age = age, weight = weight, gender = gender, goal = goal, workoutFrequency = workoutFrequency, viewModel = viewModel)
+            }
             item {
                 GoalSettingCard(
                     title = stringResource(R.string.daily_pushup_goal),
@@ -66,6 +75,129 @@ fun ProfileScreen(viewModel: ProfileViewModel = viewModel()) {
                     waterReminderFrequency = waterReminderFrequency,
                     onWaterReminderChanged = { enabled, freq -> viewModel.setWaterReminder(enabled, freq) }
                 )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun UserProfileCard(
+    age: Int, 
+    weight: Int, 
+    gender: String, 
+    goal: String,
+    workoutFrequency: String,
+    viewModel: ProfileViewModel
+) {
+    var ageInput by remember { mutableStateOf(age.toString()) }
+    var weightInput by remember { mutableStateOf(weight.toString()) }
+    
+    val genderOptions = listOf("Erkek", "Kadın", "Diğer")
+    var genderExpanded by remember { mutableStateOf(false) }
+    var selectedGender by remember { mutableStateOf(gender) }
+
+    val goalOptions = listOf("Kilo Verme", "Direnç Kazanma", "Kas Kütlesi Artırma")
+    var goalExpanded by remember { mutableStateOf(false) }
+    var selectedGoal by remember { mutableStateOf(goal) }
+
+    val frequencyOptions = listOf("Yeni Başlayan", "Orta Seviye", "Düzenli")
+    var frequencyExpanded by remember { mutableStateOf(false) }
+    var selectedFrequency by remember { mutableStateOf(workoutFrequency) }
+
+    // Update inputs when the initial values change
+    LaunchedEffect(age) { ageInput = age.toString() }
+    LaunchedEffect(weight) { weightInput = weight.toString() }
+    LaunchedEffect(gender) { selectedGender = gender }
+    LaunchedEffect(goal) { selectedGoal = goal }
+    LaunchedEffect(workoutFrequency) { selectedFrequency = workoutFrequency }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("Kullanıcı Profili", style = MaterialTheme.typography.titleLarge)
+            Spacer(modifier = Modifier.height(16.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)){
+                OutlinedTextField(value = ageInput, onValueChange = {ageInput = it}, label = { Text("Yaş") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1f))
+                OutlinedTextField(value = weightInput, onValueChange = {weightInput = it}, label = { Text("Kilo (kg)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1f))
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Gender Dropdown
+            ExposedDropdownMenuBox(expanded = genderExpanded, onExpandedChange = { genderExpanded = !genderExpanded }) {
+                OutlinedTextField(
+                    value = selectedGender,
+                    onValueChange = {}, 
+                    label = { Text("Cinsiyet") },
+                    readOnly = true,
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = genderExpanded) },
+                    modifier = Modifier.fillMaxWidth().menuAnchor()
+                )
+                ExposedDropdownMenu(expanded = genderExpanded, onDismissRequest = { genderExpanded = false }) {
+                    genderOptions.forEach { option ->
+                        DropdownMenuItem(text = { Text(option) }, onClick = {
+                            selectedGender = option
+                            genderExpanded = false
+                        })
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Goal Dropdown
+            ExposedDropdownMenuBox(expanded = goalExpanded, onExpandedChange = { goalExpanded = !goalExpanded }) {
+                OutlinedTextField(
+                    value = selectedGoal,
+                    onValueChange = {}, 
+                    label = { Text("Hedef") },
+                    readOnly = true,
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = goalExpanded) },
+                    modifier = Modifier.fillMaxWidth().menuAnchor()
+                )
+                ExposedDropdownMenu(expanded = goalExpanded, onDismissRequest = { goalExpanded = false }) {
+                    goalOptions.forEach { option ->
+                        DropdownMenuItem(text = { Text(option) }, onClick = {
+                            selectedGoal = option
+                            goalExpanded = false
+                        })
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Frequency Dropdown
+            ExposedDropdownMenuBox(expanded = frequencyExpanded, onExpandedChange = { frequencyExpanded = !frequencyExpanded }) {
+                OutlinedTextField(
+                    value = selectedFrequency,
+                    onValueChange = {}, 
+                    label = { Text("Antrenman Sıklığı") },
+                    readOnly = true,
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = frequencyExpanded) },
+                    modifier = Modifier.fillMaxWidth().menuAnchor()
+                )
+                ExposedDropdownMenu(expanded = frequencyExpanded, onDismissRequest = { frequencyExpanded = false }) {
+                    frequencyOptions.forEach { option ->
+                        DropdownMenuItem(text = { Text(option) }, onClick = {
+                            selectedFrequency = option
+                            frequencyExpanded = false
+                        })
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(onClick = { 
+                ageInput.toIntOrNull()?.let { viewModel.saveAge(it) }
+                weightInput.toIntOrNull()?.let { viewModel.saveWeight(it) }
+                viewModel.saveGender(selectedGender)
+                viewModel.saveGoal(selectedGoal)
+                viewModel.saveWorkoutFrequency(selectedFrequency)
+            }, modifier = Modifier.fillMaxWidth()) {
+                Text("Profili Güncelle")
             }
         }
     }
