@@ -16,5 +16,15 @@ data class Exercise(
     val reps: String, // e.g., "10-12" or "Maksimum"
     val restTimeSeconds: Int,
     val description: String, // How to do it, tips etc.
-    val gifUrl: String // URL for the animated GIF
+    val imageUrl: String, // URL for the static image
+    val metValue: Double = 3.0 // Metabolic Equivalent of Task - Default to a moderate value
+) : Parcelable
+
+
+@Parcelize
+data class WorkoutSummary(
+    val title: String,
+    val totalTimeMinutes: Int,
+    val caloriesBurned: Int,
+    val timestamp: Long
 ) : Parcelable

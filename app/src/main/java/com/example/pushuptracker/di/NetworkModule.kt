@@ -2,6 +2,7 @@ package com.example.pushuptracker.di
 
 import com.example.pushuptracker.BuildConfig
 import com.example.pushuptracker.ai.GeminiApiService
+import com.example.pushuptracker.data.remote.WgerApiService
 import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
 import dagger.Module
 import dagger.Provides
@@ -13,27 +14,45 @@ import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import java.util.concurrent.TimeUnit
+import javax.inject.Qualifier
 import javax.inject.Singleton
+
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class GeminiRetrofit
+
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class WgerRetrofit
 
 @Module
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
 
     private const val GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/"
+    private const val WGER_BASE_URL = "https://wger.de/api/v2/"
 
     @Provides
     @Singleton
     fun provideJson(): Json = Json {
         ignoreUnknownKeys = true
+        coerceInputValues = true
+    }
+
+    private fun provideLoggingInterceptor(): HttpLoggingInterceptor {
+        return HttpLoggingInterceptor().apply {
+            level = if (BuildConfig.DEBUG) {
+                HttpLoggingInterceptor.Level.BODY
+            } else {
+                HttpLoggingInterceptor.Level.NONE
+            }
+        }
     }
 
     @Provides
     @Singleton
-    fun provideOkHttpClient(): OkHttpClient {
-        val logging = HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BODY
-        }
-
+    @GeminiRetrofit
+    fun provideGeminiOkHttpClient(): OkHttpClient {
         return OkHttpClient.Builder()
             .addInterceptor { chain ->
                 val original = chain.request()
@@ -42,7 +61,7 @@ object NetworkModule {
                 val request = requestBuilder.build()
                 chain.proceed(request)
             }
-            .addInterceptor(logging)
+            .addInterceptor(provideLoggingInterceptor())
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
@@ -51,7 +70,20 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideRetrofit(okHttpClient: OkHttpClient, json: Json): Retrofit {
+    @WgerRetrofit
+    fun provideWgerOkHttpClient(): OkHttpClient {
+        return OkHttpClient.Builder()
+            .addInterceptor(provideLoggingInterceptor())
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)
+            .build()
+    }
+
+    @Provides
+    @Singleton
+    @GeminiRetrofit
+    fun provideGeminiRetrofit(@GeminiRetrofit okHttpClient: OkHttpClient, json: Json): Retrofit {
         return Retrofit.Builder()
             .baseUrl(GEMINI_BASE_URL)
             .client(okHttpClient)
@@ -61,7 +93,24 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideGeminiApiService(retrofit: Retrofit): GeminiApiService {
+    @WgerRetrofit
+    fun provideWgerRetrofit(@WgerRetrofit okHttpClient: OkHttpClient, json: Json): Retrofit {
+        return Retrofit.Builder()
+            .baseUrl(WGER_BASE_URL)
+            .client(okHttpClient)
+            .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
+            .build()
+    }
+
+    @Provides
+    @Singleton
+    fun provideGeminiApiService(@GeminiRetrofit retrofit: Retrofit): GeminiApiService {
         return retrofit.create(GeminiApiService::class.java)
+    }
+
+    @Provides
+    @Singleton
+    fun provideWgerApiService(@WgerRetrofit retrofit: Retrofit): WgerApiService {
+        return retrofit.create(WgerApiService::class.java)
     }
 }

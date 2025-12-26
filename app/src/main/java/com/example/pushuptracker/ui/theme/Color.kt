@@ -2,12 +2,14 @@ package com.example.pushuptracker.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Sunny Beach Day Palette
-val CharcoalBlue = Color(0xFF264653)
-val Verdigris = Color(0xFF2a9d8f)
-val SandyBrown = Color(0xFFf4a261)
-val BurntPeach = Color(0xFFe76f51)
-val PapayaWhip = Color(0xFFFDF0D5)
+// Neon Pulse Theme
+val DeepSpaceBackground = Color(0xFF121212)
+val DeepSpaceSurface = Color(0xFF1E1E1E)
+val DeepSpaceText = Color(0xFFFFFFFF)
+val DeepSpaceSecondaryText = Color(0xFFAFAFAF)
+val ElectricTealPrimary = Color(0xFF00F5D4)
+val VibrantMagentaAccent = Color(0xFFFF007F)
 
-// Standard White for contrast
+// Standard Black and White
+val Black = Color(0xFF000000)
 val White = Color(0xFFFFFFFF)

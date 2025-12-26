@@ -3,7 +3,6 @@ package com.example.pushuptracker.data.repo
 import com.example.pushuptracker.data.local.WaterDao
 import com.example.pushuptracker.model.ActivityRecord
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject
@@ -14,11 +13,6 @@ class WaterRepo @Inject constructor(private val waterDao: WaterDao) {
 
     private val todayDateString: String
         get() = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
-
-    fun getWaterIntakeForToday(): Flow<Int> {
-        return waterDao.getRecordForDate(todayDateString)
-            .map { it?.value?.toInt() ?: 0 }
-    }
 
     fun getRecordForDate(date: String): Flow<ActivityRecord?> {
         return waterDao.getRecordForDate(date)
@@ -35,5 +29,9 @@ class WaterRepo @Inject constructor(private val waterDao: WaterDao) {
             date = todayDateString
         )
         waterDao.upsert(todayRecord)
+    }
+
+    suspend fun clear() {
+        waterDao.clear()
     }
 }

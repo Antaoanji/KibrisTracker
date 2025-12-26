@@ -1,21 +1,27 @@
 package com.example.pushuptracker.model
 
 import androidx.annotation.DrawableRes
+import androidx.annotation.StringRes
 import com.example.pushuptracker.R
 
 data class Badge(
     val id: String,
-    val title: String,
-    @DrawableRes val iconRes: Int
+    @get:StringRes val title: Int,
+    @get:StringRes val descriptionRes: Int,
+    @get:DrawableRes val iconRes: Int,
+    val progress: Float = 0f // 0.0 to 1.0
 ) {
     companion object {
         val allBadges = listOf(
-            Badge(id = "first_pushup", title = "İlk Şınav", iconRes = R.drawable.ic_launcher_foreground),
-            Badge(id = "10_pushups_day", title = "10 Şınav/Gün", iconRes = R.drawable.ic_launcher_foreground),
-            Badge(id = "50_pushups_day", title = "50 Şınav/Gün", iconRes = R.drawable.ic_launcher_foreground),
-            Badge(id = "100_pushups_day", title = "100 Şınav/Gün", iconRes = R.drawable.ic_launcher_foreground),
-            Badge(id = "7_day_streak", title = "7 Günlük Seri", iconRes = R.drawable.ic_launcher_foreground),
-            Badge(id = "30_day_streak", title = "30 Günlük Seri", iconRes = R.drawable.ic_launcher_foreground)
+            Badge("streak_3", R.string.badge_streak_3_title, R.string.badge_streak_3_desc, R.drawable.ic_launcher_foreground),
+            Badge("streak_7", R.string.badge_streak_7_title, R.string.badge_streak_7_desc, R.drawable.ic_launcher_foreground),
+            Badge("streak_14", R.string.badge_streak_14_title, R.string.badge_streak_14_desc, R.drawable.ic_launcher_foreground),
+            Badge("streak_30", R.string.badge_streak_30_title, R.string.badge_streak_30_desc, R.drawable.ic_launcher_foreground),
+            Badge("total_100", R.string.badge_total_100_title, R.string.badge_total_100_desc, R.drawable.ic_launcher_foreground),
+            Badge("total_500", R.string.badge_total_500_title, R.string.badge_total_500_desc, R.drawable.ic_launcher_foreground),
+            Badge("total_1000", R.string.badge_total_1000_title, R.string.badge_total_1000_desc, R.drawable.ic_launcher_foreground),
+            Badge("total_5000", R.string.badge_total_5000_title, R.string.badge_total_5000_desc, R.drawable.ic_launcher_foreground),
+            Badge("single_50", R.string.badge_single_50_title, R.string.badge_single_50_desc, R.drawable.ic_launcher_foreground)
         )
     }
 }

@@ -40,13 +40,14 @@ import com.github.mikephil.charting.highlight.Highlight
 import com.github.mikephil.charting.listener.OnChartValueSelectedListener
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
-import java.time.temporal.WeekFields
+import java.time.format.TextStyle
 import java.util.Locale
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 @Composable
 fun StatsScreen(viewModel: StatsViewModel = hiltViewModel()) {
-    val chartRecords by viewModel.chartRecords.collectAsStateWithLifecycle(emptyList())
+    val chartUiState by viewModel.chartUiState.collectAsStateWithLifecycle()
     val overallStats by viewModel.overallStats.collectAsStateWithLifecycle()
     val chartTimeSpan by viewModel.chartTimeSpan.collectAsStateWithLifecycle()
     val chartType by viewModel.chartType.collectAsStateWithLifecycle()
@@ -66,12 +67,12 @@ fun StatsScreen(viewModel: StatsViewModel = hiltViewModel()) {
             }
             item {
                 PushupChartCard(
-                    records = chartRecords,
+                    records = chartUiState.records,
                     timeSpan = chartTimeSpan,
                     chartType = chartType,
                     onTimeSpanSelected = { viewModel.setChartTimeSpan(it) },
                     onChartTypeSelected = { viewModel.setChartType(it) },
-                    onEntrySelected = { date -> viewModel.onChartEntrySelected(date) }
+                    onEntrySelected = { record -> viewModel.onChartEntrySelected(record) }
                 )
             }
         }
@@ -129,27 +130,21 @@ fun EditRecordDialog(record: ActivityRecord, onDismiss: () -> Unit, onSave: (Dou
 @Composable
 fun OverallStatsCard(stats: OverallStats) {
     Card(modifier = Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(4.dp)) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(text = "Genel İstatistikler", style = MaterialTheme.typography.titleLarge)
+
+            // Main Stats
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
                 StatItem(value = stats.totalPushups.toString(), label = "Toplam Şınav")
                 StatItem(value = stats.totalWater.toString(), label = "Toplam Su (ml)")
                 StatItem(value = stats.currentStreak.toString(), label = "Seri (Gün)")
             }
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    StatItem(value = stats.todayPushups.toString(), label = "Bugün")
-                    StatItem(value = stats.yesterdayPushups.toString(), label = "Dün")
-                }
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    StatItem(value = stats.thisWeekTotalPushups.toString(), label = "Bu Hafta")
-                    StatItem(value = stats.lastWeekTotalPushups.toString(), label = "Geçen Hafta")
-                }
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    StatItem(value = stats.thisMonthTotalPushups.toString(), label = "Bu Ay")
-                    StatItem(value = stats.lastMonthTotalPushups.toString(), label = "Geçen Ay")
-                }
-            }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+            // Comparisons
+            ComparisonRow(label = "Haftalık Değişim", current = stats.thisWeekTotalPushups, previous = stats.lastWeekTotalPushups)
+            ComparisonRow(label = "Aylık Değişim", current = stats.thisMonthTotalPushups, previous = stats.lastMonthTotalPushups)
         }
     }
 }
@@ -163,13 +158,46 @@ fun StatItem(value: String, label: String) {
 }
 
 @Composable
+fun ComparisonRow(label: String, current: Int, previous: Int) {
+    val difference = current - previous
+    val diffText = when {
+        difference > 0 -> "+${abs(difference)}"
+        difference < 0 -> "-${abs(difference)}"
+        else -> "-"
+    }
+    val diffColor = when {
+        difference > 0 -> MaterialTheme.colorScheme.tertiary
+        difference < 0 -> MaterialTheme.colorScheme.error
+        else -> MaterialTheme.colorScheme.onSurface
+    }
+
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(text = label, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("Önceki", style = MaterialTheme.typography.bodySmall)
+                Text(previous.toString(), style = MaterialTheme.typography.titleMedium)
+            }
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("Şimdiki", style = MaterialTheme.typography.bodySmall)
+                Text(current.toString(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            }
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("Değişim", style = MaterialTheme.typography.bodySmall)
+                Text(diffText, style = MaterialTheme.typography.titleMedium, color = diffColor, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+@Composable
 fun PushupChartCard(
     records: List<ActivityRecord>,
     timeSpan: ChartTimeSpan,
     chartType: ChartType,
     onTimeSpanSelected: (ChartTimeSpan) -> Unit,
     onChartTypeSelected: (ChartType) -> Unit,
-    onEntrySelected: (LocalDate) -> Unit
+    onEntrySelected: (ActivityRecord) -> Unit
 ) {
     Card(modifier = Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(4.dp)) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -191,8 +219,8 @@ fun PushupChartCard(
                 ToggleButton(text = "Bar", selected = chartType == ChartType.BAR) { onChartTypeSelected(ChartType.BAR) }
             }
 
-            key(timeSpan, chartType) { // Recreate the chart when timeSpan or chartType changes
-                if (records.all { it.value == 0.0 }) {
+            key(timeSpan, chartType, records) { // Recreate the chart when data changes
+                if (records.isEmpty() || records.all { it.value == 0.0 }) {
                     Box(modifier = Modifier.height(250.dp).padding(top = 16.dp), contentAlignment = Alignment.Center) {
                         Text(text = stringResource(id = R.string.no_stats_to_display_in_chart))
                     }
@@ -223,20 +251,16 @@ fun ToggleButton(text: String, selected: Boolean, onClick: () -> Unit) {
     }
 }
 
-class DynamicDateAxisFormatter : ValueFormatter() {
-    private var currentPattern = "d MMM"
-    private var locale = Locale.forLanguageTag("tr")
-
-    fun setFormat(timeSpan: ChartTimeSpan) {
-        currentPattern = if (timeSpan == ChartTimeSpan.WEEK) "d MMM" else "MMM"
-    }
+class IndexToDateValueFormatter(private val records: List<ActivityRecord>, private val timeSpan: ChartTimeSpan) : ValueFormatter() {
+    private val weekFormatter = DateTimeFormatter.ofPattern("d MMM", Locale.forLanguageTag("tr"))
+    private val yearFormatter = DateTimeFormatter.ofPattern("MMM", Locale.forLanguageTag("tr"))
 
     override fun getFormattedValue(value: Float): String {
-        return try {
-            val date = LocalDate.ofEpochDay(value.toLong())
-            val formatter = DateTimeFormatter.ofPattern(currentPattern, locale)
-            date.format(formatter)
-        } catch (_: Exception) {
+        val index = value.toInt()
+        return if (index >= 0 && index < records.size) {
+            val date = LocalDate.parse(records[index].date)
+            if (timeSpan == ChartTimeSpan.WEEK) date.format(weekFormatter) else date.month.getDisplayName(TextStyle.FULL, Locale.forLanguageTag("tr"))
+        } else {
             ""
         }
     }
@@ -248,17 +272,10 @@ val yAxisValueFormatter = object : ValueFormatter() {
     }
 }
 
-fun createChartValueSelectedListener(onEntrySelected: (LocalDate) -> Unit) = object : OnChartValueSelectedListener {
-    override fun onValueSelected(e: Entry?, h: Highlight?) {
-        e?.let { onEntrySelected(LocalDate.ofEpochDay(it.x.toLong())) }
-    }
-    override fun onNothingSelected() {}
-}
 
 @Composable
-fun LineChart(records: List<ActivityRecord>, timeSpan: ChartTimeSpan, onEntrySelected: (LocalDate) -> Unit) {
+fun LineChart(records: List<ActivityRecord>, timeSpan: ChartTimeSpan, onEntrySelected: (ActivityRecord) -> Unit) {
     val chartColor = MaterialTheme.colorScheme.primary.toArgb()
-    val today = LocalDate.now()
 
     AndroidView(
         factory = { context ->
@@ -266,16 +283,13 @@ fun LineChart(records: List<ActivityRecord>, timeSpan: ChartTimeSpan, onEntrySel
                 description.isEnabled = false
                 setDrawGridBackground(false)
                 legend.isEnabled = false
-                setOnChartValueSelectedListener(createChartValueSelectedListener(onEntrySelected))
 
                 xAxis.apply {
                     position = XAxis.XAxisPosition.BOTTOM
                     setDrawGridLines(false)
                     textColor = chartColor
                     axisLineColor = chartColor
-                    valueFormatter = DynamicDateAxisFormatter()
                     granularity = 1f
-                    labelCount = if (timeSpan == ChartTimeSpan.WEEK) 7 else 12
                 }
                 axisLeft.apply {
                     textColor = chartColor
@@ -283,15 +297,15 @@ fun LineChart(records: List<ActivityRecord>, timeSpan: ChartTimeSpan, onEntrySel
                     setDrawGridLines(true)
                     granularity = 5f
                     valueFormatter = yAxisValueFormatter
-                    axisMinimum = 0f // Start Y-axis at 0
+                    axisMinimum = 0f
                 }
                 axisRight.isEnabled = false
             }
         },
         update = { chart ->
-            (chart.xAxis.valueFormatter as DynamicDateAxisFormatter).setFormat(timeSpan)
-
-            val entries = records.map { Entry(it.date.toLocalDate().toEpochDay().toFloat(), it.value.toFloat()) }
+            val entries = records.mapIndexed { index, record -> 
+                Entry(index.toFloat(), record.value.toFloat())
+            }
             val dataSet = LineDataSet(entries, "Push-ups").apply {
                 color = chartColor
                 valueTextColor = Color.TRANSPARENT
@@ -299,20 +313,24 @@ fun LineChart(records: List<ActivityRecord>, timeSpan: ChartTimeSpan, onEntrySel
                 circleHoleColor = chartColor
                 lineWidth = 2f
             }
-
-            val weekFields = WeekFields.of(Locale.getDefault())
-            if (timeSpan == ChartTimeSpan.WEEK) {
-                chart.xAxis.axisMinimum = today.with(weekFields.dayOfWeek(), 1).toEpochDay().toFloat()
-                chart.xAxis.axisMaximum = today.with(weekFields.dayOfWeek(), 7).toEpochDay().toFloat()
-            } else {
-                val startOfYear = today.withDayOfYear(1)
-                chart.xAxis.axisMinimum = startOfYear.toEpochDay().toFloat()
-                chart.xAxis.axisMaximum = startOfYear.plusYears(1).minusDays(1).toEpochDay().toFloat()
-            }
-
-            chart.axisLeft.axisMaximum = (entries.maxOfOrNull { it.y }?.plus(10f)) ?: 50f
-
+            
+            chart.xAxis.valueFormatter = IndexToDateValueFormatter(records, timeSpan)
+            chart.xAxis.axisMinimum = -0.5f
+            chart.xAxis.axisMaximum = records.size - 0.5f
             chart.data = LineData(dataSet)
+
+            chart.setOnChartValueSelectedListener(object : OnChartValueSelectedListener {
+                override fun onValueSelected(e: Entry?, h: Highlight?) {
+                    e?.let {
+                        val index = it.x.toInt()
+                        if (index >= 0 && index < records.size) {
+                            onEntrySelected(records[index])
+                        }
+                    }
+                }
+                override fun onNothingSelected() {}
+            })
+
             chart.invalidate()
         },
         modifier = Modifier.fillMaxSize()
@@ -320,9 +338,8 @@ fun LineChart(records: List<ActivityRecord>, timeSpan: ChartTimeSpan, onEntrySel
 }
 
 @Composable
-fun BarChart(records: List<ActivityRecord>, timeSpan: ChartTimeSpan, onEntrySelected: (LocalDate) -> Unit) {
+fun BarChart(records: List<ActivityRecord>, timeSpan: ChartTimeSpan, onEntrySelected: (ActivityRecord) -> Unit) {
     val chartColor = MaterialTheme.colorScheme.primary.toArgb()
-    val today = LocalDate.now()
 
     AndroidView(
         factory = { context ->
@@ -330,16 +347,13 @@ fun BarChart(records: List<ActivityRecord>, timeSpan: ChartTimeSpan, onEntrySele
                 description.isEnabled = false
                 setDrawGridBackground(false)
                 legend.isEnabled = false
-                setOnChartValueSelectedListener(createChartValueSelectedListener(onEntrySelected))
 
                 xAxis.apply {
                     position = XAxis.XAxisPosition.BOTTOM
                     setDrawGridLines(false)
                     textColor = chartColor
                     axisLineColor = chartColor
-                    valueFormatter = DynamicDateAxisFormatter()
                     granularity = 1f
-                    labelCount = if (timeSpan == ChartTimeSpan.WEEK) 7 else 12
                 }
                 axisLeft.apply {
                     textColor = chartColor
@@ -347,35 +361,39 @@ fun BarChart(records: List<ActivityRecord>, timeSpan: ChartTimeSpan, onEntrySele
                     setDrawGridLines(true)
                     granularity = 5f
                     valueFormatter = yAxisValueFormatter
-                    axisMinimum = 0f // Start Y-axis at 0
+                    axisMinimum = 0f
                 }
                 axisRight.isEnabled = false
             }
         },
         update = { chart ->
-            (chart.xAxis.valueFormatter as DynamicDateAxisFormatter).setFormat(timeSpan)
-
-            val entries = records.map { BarEntry(it.date.toLocalDate().toEpochDay().toFloat(), it.value.toFloat()) }
+            val entries = records.mapIndexed { index, record -> 
+                BarEntry(index.toFloat(), record.value.toFloat())
+            }
             val dataSet = BarDataSet(entries, "Push-ups").apply {
                 color = chartColor
                 valueTextColor = Color.TRANSPARENT
             }
-            
+
+            chart.xAxis.valueFormatter = IndexToDateValueFormatter(records, timeSpan)
             val data = BarData(dataSet)
-            data.barWidth = if(timeSpan == ChartTimeSpan.WEEK) 0.5f else 20f
+            data.barWidth = 0.5f
             chart.data = data
 
-            val weekFields = WeekFields.of(Locale.getDefault())
-            if (timeSpan == ChartTimeSpan.WEEK) {
-                chart.xAxis.axisMinimum = today.with(weekFields.dayOfWeek(), 1).toEpochDay().toFloat()
-                chart.xAxis.axisMaximum = today.with(weekFields.dayOfWeek(), 7).toEpochDay().toFloat()
-            } else {
-                val startOfYear = today.withDayOfYear(1)
-                chart.xAxis.axisMinimum = startOfYear.toEpochDay().toFloat()
-                chart.xAxis.axisMaximum = startOfYear.plusYears(1).minusDays(1).toEpochDay().toFloat()
-            }
+            chart.xAxis.axisMinimum = -0.5f
+            chart.xAxis.axisMaximum = (records.size - 1) + 0.5f
 
-            chart.axisLeft.axisMaximum = (entries.maxOfOrNull { it.y }?.plus(10f)) ?: 50f
+            chart.setOnChartValueSelectedListener(object : OnChartValueSelectedListener {
+                override fun onValueSelected(e: Entry?, h: Highlight?) {
+                    e?.let {
+                        val index = it.x.toInt()
+                        if (index >= 0 && index < records.size) {
+                            onEntrySelected(records[index])
+                        }
+                    }
+                }
+                override fun onNothingSelected() {}
+            })
 
             chart.invalidate()
         },

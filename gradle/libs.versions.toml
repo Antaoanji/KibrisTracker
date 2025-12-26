@@ -12,6 +12,7 @@ lifecycle = "2.9.3"
 room = "2.8.4"
 work = "2.11.0"
 composeBom = "2025.12.01"
+composeUi = "1.7.0-beta03" # Added for fonts
 paging = "3.4.0"
 datastore = "1.1.7"
 lottie = "6.4.1"
@@ -63,6 +64,7 @@ androidx-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
 androidx-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
 androidx-material3 = { group = "androidx.compose.material3", name = "material3" }
 androidx-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended" }
+androidx-ui-text-google-fonts = { group = "androidx.compose.ui", name = "ui-text-google-fonts", version.ref = "composeUi" } # Added Google Fonts
 
 # Navigation
 androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigation" }

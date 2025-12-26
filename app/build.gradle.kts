@@ -11,12 +11,18 @@ plugins {
     id("kotlin-parcelize")
 }
 
-// Read the local.properties file
-val localProperties = Properties()
-val localPropertiesFile = rootProject.file("local.properties")
-if (localPropertiesFile.exists()) {
-    localProperties.load(FileInputStream(localPropertiesFile))
+// Function to read properties from a file
+fun getProperties(fileName: String): Properties {
+    val properties = Properties()
+    val propertiesFile = rootProject.file(fileName)
+    if (propertiesFile.exists()) {
+        properties.load(FileInputStream(propertiesFile))
+    }
+    return properties
 }
+
+// Read properties from local.properties
+val localProperties = getProperties("local.properties")
 
 android {
     namespace = "com.example.pushuptracker"
@@ -24,7 +30,7 @@ android {
 
     defaultConfig {
         applicationId = "com.example.pushuptracker"
-        minSdk = 24
+        minSdk = 26
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
@@ -80,6 +86,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.coil.compose)
     implementation(libs.coil.gif)
+    implementation(libs.androidx.ui.text.google.fonts) // Added Google Fonts dependency
+    implementation("androidx.core:core-splashscreen:1.0.1") // Added splash screen dependency
 
     // Navigation
     implementation(libs.androidx.navigation.compose)
@@ -93,11 +101,6 @@ dependencies {
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
-
-    // Firebase
-    implementation(platform(libs.firebase.bom))
-    implementation(libs.firebase.auth)
-    implementation(libs.firebase.firestore)
 
     // Networking & AI
     implementation(libs.retrofit)

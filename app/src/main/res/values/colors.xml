@@ -1,13 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Sunny Beach Day Palette -->
-    <color name="charcoal_blue">#264653</color>
-    <color name="verdigris">#2a9d8f</color>
-    <color name="jasmine">#e9c46a</color>
-    <color name="sandy_brown">#f4a261</color>
-    <color name="burnt_peach">#e76f51</color>
+    <!-- Neon Pulse Theme -->
+    <color name="deep_space_background">#121212</color>
+    <color name="deep_space_surface">#1E1E1E</color>
+    <color name="deep_space_text">#FFFFFF</color>
+    <color name="deep_space_secondary_text">#AFAFAF</color>
+    <color name="electric_teal_primary">#00F5D4</color>
+    <color name="vibrant_magenta_accent">#FF007F</color>
 
     <!-- Standard Black and White -->
-    <color name="black">#FF000000</color>
-    <color name="white">#FFFFFFFF</color>
+    <color name="black">#000000</color>
+    <color name="white">#FFFFFF</color>
 </resources>

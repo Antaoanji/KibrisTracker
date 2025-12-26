@@ -1,30 +1,51 @@
 package com.example.pushuptracker.ai
 
-import com.example.pushuptracker.BuildConfig
-import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import retrofit2.HttpException
 import retrofit2.http.Body
 import retrofit2.http.POST
 import javax.inject.Inject
 import javax.inject.Singleton
 
-// --- Data Classes for Serialization ---
-@Serializable
-data class GenerateContentRequest(val contents: List<Content>)
+// ---------- API MODELS ----------
 
 @Serializable
-data class Content(val parts: List<Part>)
+data class GenerateContentRequest(
+    val contents: List<Content>
+)
 
 @Serializable
-data class Part(val text: String)
+data class Content(
+    val parts: List<Part>
+)
 
 @Serializable
-data class GenerateContentResponse(val candidates: List<Candidate>?)
+data class Part(
+    val text: String
+)
 
 @Serializable
-data class Candidate(val content: Content?)
+data class GenerateContentResponse(
+    val candidates: List<Candidate>?
+)
 
-// --- Retrofit API Interface ---
+@Serializable
+data class Candidate(
+    val content: Content?
+)
+
+// ---------- RESULT WRAPPER ----------
+
+sealed class AiResult {
+    data class Success(val text: String) : AiResult()
+    data class Error(
+        val code: Int,
+        val message: String
+    ) : AiResult()
+}
+
+// ---------- RETROFIT API ----------
+
 interface GeminiApiService {
     @POST("v1beta/models/gemini-2.5-flash:generateContent")
     suspend fun generateContent(
@@ -32,23 +53,63 @@ interface GeminiApiService {
     ): GenerateContentResponse
 }
 
-// --- Service using the Retrofit Interface ---
-@Singleton
-class GenerativeAiService @Inject constructor(private val geminiApi: GeminiApiService) {
+// ---------- SERVICE ----------
 
-    suspend fun generateWorkout(prompt: String): String {
+@Singleton
+class GenerativeAiService @Inject constructor(
+    private val geminiApi: GeminiApiService
+) {
+
+    suspend fun generateWorkout(prompt: String): AiResult {
         val request = GenerateContentRequest(
-            contents = listOf(Content(parts = listOf(Part(text = prompt))))
+            contents = listOf(
+                Content(
+                    parts = listOf(Part(text = prompt))
+                )
+            )
         )
+
         return try {
             val response = geminiApi.generateContent(request)
-            // Safely access the text, providing a default message if any part is null
-            response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
-                ?: "Yapay zekadan bir yanıt alınamadı. Lütfen tekrar deneyin."
+
+            val text = response
+                .candidates
+                ?.firstOrNull()
+                ?.content
+                ?.parts
+                ?.firstOrNull()
+                ?.text
+
+            if (text.isNullOrBlank()) {
+                AiResult.Error(
+                    code = -1,
+                    message = "Boş yanıt alındı"
+                )
+            } else {
+                AiResult.Success(text)
+            }
+
+        } catch (e: HttpException) {
+
+            if (e.code() == 429) {
+                // ❌ RETRY YOK — FREE TIER
+                AiResult.Error(
+                    code = 429,
+                    message = "Limit doldu"
+                )
+            } else {
+                AiResult.Error(
+                    code = e.code(),
+                    message = "Sunucu hatası"
+                )
+            }
+
         } catch (e: Exception) {
-            // In a real app, you should log the error for debugging
-            // Log.e("GenerativeAiService", "API Call failed", e)
-            e.localizedMessage ?: "Bilinmeyen bir ağ hatası oluştu."
+
+            AiResult.Error(
+                code = -1,
+                message = "Ağ hatası"
+            )
         }
     }
 }

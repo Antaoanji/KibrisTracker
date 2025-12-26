@@ -3,7 +3,6 @@ package com.example.pushuptracker.data.repo
 import com.example.pushuptracker.data.local.PushupDao
 import com.example.pushuptracker.model.ActivityRecord
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject
@@ -15,15 +14,10 @@ class PushupRepo @Inject constructor(private val pushupDao: PushupDao) {
     private val todayDateString: String
         get() = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
 
-    fun getPushupsForToday(): Flow<Int> {
-        return pushupDao.getRecordForDate(todayDateString)
-            .map { it?.value?.toInt() ?: 0 }
-    }
-
     fun getRecordForDate(date: String): Flow<ActivityRecord?> {
         return pushupDao.getRecordForDate(date)
     }
-    
+
     fun getAllRecords(): Flow<List<ActivityRecord>> {
         return pushupDao.getAllRecords()
     }
@@ -48,5 +42,9 @@ class PushupRepo @Inject constructor(private val pushupDao: PushupDao) {
 
     suspend fun deletePushupsForDate(date: String) {
         pushupDao.delete(date)
+    }
+
+    suspend fun clear() {
+        pushupDao.clear()
     }
 }

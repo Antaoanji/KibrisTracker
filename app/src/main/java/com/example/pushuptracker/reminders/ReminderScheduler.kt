@@ -11,7 +11,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class ReminderScheduler @Inject constructor(@ApplicationContext private val context: Context) {
+class ReminderScheduler @Inject constructor(@param:ApplicationContext private val context: Context) {
 
     private val workManager = WorkManager.getInstance(context)
 
@@ -24,7 +24,6 @@ class ReminderScheduler @Inject constructor(@ApplicationContext private val cont
         val now = ZonedDateTime.now()
         var scheduleTime = now.with(time)
 
-        // If the time is already past for today, schedule it for tomorrow
         if (now.isAfter(scheduleTime)) {
             scheduleTime = scheduleTime.plusDays(1)
         }
@@ -33,15 +32,15 @@ class ReminderScheduler @Inject constructor(@ApplicationContext private val cont
 
         val inputData = workDataOf(ReminderWorker.KEY_REMINDER_TYPE to ReminderWorker.TYPE_PUSHUP)
 
-        val workRequest = OneTimeWorkRequestBuilder<ReminderWorker>()
+        val workRequest = PeriodicWorkRequestBuilder<ReminderWorker>(1, TimeUnit.DAYS)
             .setInitialDelay(initialDelay, TimeUnit.MILLISECONDS)
             .setInputData(inputData)
             .addTag(PUSHUP_REMINDER_TAG)
             .build()
 
-        workManager.enqueueUniqueWork(
+        workManager.enqueueUniquePeriodicWork(
             PUSHUP_REMINDER_TAG,
-            ExistingWorkPolicy.REPLACE,
+            ExistingPeriodicWorkPolicy.UPDATE,
             workRequest
         )
     }

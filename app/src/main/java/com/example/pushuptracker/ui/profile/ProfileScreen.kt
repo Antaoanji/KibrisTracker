@@ -2,366 +2,281 @@ package com.example.pushuptracker.ui.profile
 
 import android.app.TimePickerDialog
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.airbnb.lottie.compose.LottieAnimation
+import com.airbnb.lottie.compose.LottieCompositionSpec
+import com.airbnb.lottie.compose.rememberLottieComposition
 import com.example.pushuptracker.R
+import kotlinx.coroutines.delay
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(viewModel: ProfileViewModel = hiltViewModel()) {
-    val dailyGoal by viewModel.dailyGoal.collectAsStateWithLifecycle()
-    val dailyWaterGoal by viewModel.dailyWaterGoal.collectAsStateWithLifecycle()
-    val pushupReminderEnabled by viewModel.pushupReminderEnabled.collectAsStateWithLifecycle()
-    val pushupReminderTime by viewModel.pushupReminderTime.collectAsStateWithLifecycle()
-    val waterReminderEnabled by viewModel.waterReminderEnabled.collectAsStateWithLifecycle()
-    val waterReminderFrequency by viewModel.waterReminderFrequency.collectAsStateWithLifecycle()
-    val age by viewModel.age.collectAsStateWithLifecycle()
-    val weight by viewModel.weight.collectAsStateWithLifecycle()
-    val gender by viewModel.gender.collectAsStateWithLifecycle()
-    val goal by viewModel.goal.collectAsStateWithLifecycle()
-    val workoutFrequency by viewModel.workoutFrequency.collectAsStateWithLifecycle()
+    val age by viewModel.age.collectAsStateWithLifecycle(30)
+    val weight by viewModel.weight.collectAsStateWithLifecycle(70)
+    val gender by viewModel.gender.collectAsStateWithLifecycle("Erkek")
+    val goal by viewModel.goal.collectAsStateWithLifecycle("Direnç Kazanma")
+    val workoutFrequency by viewModel.workoutFrequency.collectAsStateWithLifecycle("Orta Seviye")
+    val dailyGoal by viewModel.dailyGoal.collectAsStateWithLifecycle(50)
+    val dailyWaterGoal by viewModel.dailyWaterGoal.collectAsStateWithLifecycle(2000)
+    val pushupReminderEnabled by viewModel.pushupReminderEnabled.collectAsStateWithLifecycle(false)
+    val pushupReminderTime by viewModel.pushupReminderTime.collectAsStateWithLifecycle("18:00")
+    val waterReminderEnabled by viewModel.waterReminderEnabled.collectAsStateWithLifecycle(false)
+    val waterReminderFrequency by viewModel.waterReminderFrequency.collectAsStateWithLifecycle(120)
 
+    var ageInput by remember(age) { mutableStateOf(age.toString()) }
+    var weightInput by remember(weight) { mutableStateOf(weight.toString()) }
+    var selectedGender by remember(gender) { mutableStateOf(gender) }
+    var selectedGoal by remember(goal) { mutableStateOf(goal) }
+    var selectedFrequency by remember(workoutFrequency) { mutableStateOf(workoutFrequency) }
+    var showResetDialog by remember { mutableStateOf(false) }
+    var showCheckAnimation by remember { mutableStateOf(false) }
 
-    Scaffold {
-        padding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            item {
-                UserProfileCard(age = age, weight = weight, gender = gender, goal = goal, workoutFrequency = workoutFrequency, viewModel = viewModel)
+    if (showResetDialog) {
+        AlertDialog(
+            onDismissRequest = { showResetDialog = false },
+            title = { Text("Tüm Verileri Sıfırla") },
+            text = { Text("Bu işlem geri alınamaz. Tüm ilerlemeniz, hedefleriniz ve ayarlarınız silinecektir. Emin misiniz?") },
+            confirmButton = {
+                Button(
+                    onClick = { 
+                        viewModel.resetAllUserData()
+                        showResetDialog = false 
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Evet, Sıfırla")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetDialog = false }) {
+                    Text("İptal")
+                }
             }
-            item {
-                GoalSettingCard(
-                    title = stringResource(R.string.daily_pushup_goal),
-                    currentGoal = dailyGoal,
-                    label = stringResource(R.string.push_up_count),
-                    onSave = { newGoal ->
-                        viewModel.saveDailyGoal(newGoal)
+        )
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold {
+            padding ->
+            LazyColumn(
+                modifier = Modifier.fillMaxSize().padding(padding),
+                contentPadding = PaddingValues(16.dp)
+            ) {
+                // --- User Profile Section ---
+                item {
+                    SectionTitle(title = "Kullanıcı Profili")
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)){
+                        OutlinedTextField(value = ageInput, onValueChange = {ageInput = it}, label = { Text("Yaş") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1f), colors = transparentTextFieldColors())
+                        OutlinedTextField(value = weightInput, onValueChange = {weightInput = it}, label = { Text("Kilo (kg)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1f), colors = transparentTextFieldColors())
                     }
-                )
-            }
-            item {
-                GoalSettingCard(
-                    title = stringResource(R.string.daily_water_goal),
-                    currentGoal = dailyWaterGoal,
-                    label = stringResource(R.string.water_drunk_ml),
-                    onSave = { newGoal ->
-                        viewModel.saveDailyWaterGoal(newGoal)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    ProfileDropdown(label = "Cinsiyet", selectedOption = selectedGender, options = listOf("Erkek", "Kadın", "Diğer")) { selectedGender = it }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    ProfileDropdown(label = "Hedef", selectedOption = selectedGoal, options = listOf("Kilo Verme", "Direnç Kazanma", "Kas Kütlesi Artırma")) { selectedGoal = it }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    ProfileDropdown(label = "Antrenman Sıklığı", selectedOption = selectedFrequency, options = listOf("Yeni Başlayan", "Orta Seviye", "Düzenli")) { selectedFrequency = it }
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(onClick = { 
+                        ageInput.toIntOrNull()?.let { viewModel.saveAge(it) }
+                        weightInput.toIntOrNull()?.let { viewModel.saveWeight(it) }
+                        viewModel.saveGender(selectedGender)
+                        viewModel.saveGoal(selectedGoal)
+                        viewModel.saveWorkoutFrequency(selectedFrequency)
+                        showCheckAnimation = true
+                    }, modifier = Modifier.fillMaxWidth()) {
+                        Text("Profili Güncelle")
                     }
-                )
+                }
+
+                // --- Daily Goals Section ---
+                item {
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
+                    SectionTitle(title = "Günlük Hedefler")
+                    Spacer(modifier = Modifier.height(16.dp))
+                    GoalInput(label = "Günlük Şınav Hedefi", currentGoal = dailyGoal) { 
+                        viewModel.saveDailyGoal(it) 
+                        showCheckAnimation = true
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                    GoalInput(label = "Günlük Su Hedefi (ml)", currentGoal = dailyWaterGoal) { 
+                        viewModel.saveDailyWaterGoal(it) 
+                        showCheckAnimation = true
+                    }
+                }
+
+                // --- Reminders Section ---
+                item {
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
+                    SectionTitle(title = "Hatırlatıcılar")
+                    Spacer(modifier = Modifier.height(16.dp))
+                    ReminderSwitch(label = "Şınav Hatırlatıcısı", enabled = pushupReminderEnabled, detail = pushupReminderTime) { enabled, time -> viewModel.setPushupReminder(enabled, time) }
+                    Spacer(modifier = Modifier.height(16.dp))
+                    ReminderSwitch(label = "Su Hatırlatıcısı", enabled = waterReminderEnabled, detail = "${waterReminderFrequency} dk") { enabled, _ -> viewModel.setWaterReminder(enabled, null) }
+                }
+                
+                // --- Reset Section ---
+                item {
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
+                    Button(
+                        onClick = { showResetDialog = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+                    ) {
+                        Text("Tüm Verileri Sıfırla", color = MaterialTheme.colorScheme.onErrorContainer)
+                    }
+                }
             }
-            item {
-                RemindersCard(
-                    pushupReminderEnabled = pushupReminderEnabled,
-                    pushupReminderTime = pushupReminderTime,
-                    onPushupReminderChanged = { enabled, time -> viewModel.setPushupReminder(enabled, time) },
-                    waterReminderEnabled = waterReminderEnabled,
-                    waterReminderFrequency = waterReminderFrequency,
-                    onWaterReminderChanged = { enabled, freq -> viewModel.setWaterReminder(enabled, freq) }
-                )
+        }
+
+        if (showCheckAnimation) {
+            val lottieComposition by rememberLottieComposition(LottieCompositionSpec.RawRes(R.raw.check))
+            LottieAnimation(
+                composition = lottieComposition,
+                modifier = Modifier.size(150.dp).align(Alignment.Center)
+            )
+            LaunchedEffect(lottieComposition) {
+                delay(1500)
+                showCheckAnimation = false
             }
         }
     }
+}
+
+@Composable
+fun SectionTitle(title: String) {
+    Text(text = title, style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun UserProfileCard(
-    age: Int, 
-    weight: Int, 
-    gender: String, 
-    goal: String,
-    workoutFrequency: String,
-    viewModel: ProfileViewModel
-) {
-    var ageInput by remember { mutableStateOf(age.toString()) }
-    var weightInput by remember { mutableStateOf(weight.toString()) }
-    
-    val genderOptions = listOf("Erkek", "Kadın", "Diğer")
-    var genderExpanded by remember { mutableStateOf(false) }
-    var selectedGender by remember { mutableStateOf(gender) }
-
-    val goalOptions = listOf("Kilo Verme", "Direnç Kazanma", "Kas Kütlesi Artırma")
-    var goalExpanded by remember { mutableStateOf(false) }
-    var selectedGoal by remember { mutableStateOf(goal) }
-
-    val frequencyOptions = listOf("Yeni Başlayan", "Orta Seviye", "Düzenli")
-    var frequencyExpanded by remember { mutableStateOf(false) }
-    var selectedFrequency by remember { mutableStateOf(workoutFrequency) }
-
-    // Update inputs when the initial values change
-    LaunchedEffect(age) { ageInput = age.toString() }
-    LaunchedEffect(weight) { weightInput = weight.toString() }
-    LaunchedEffect(gender) { selectedGender = gender }
-    LaunchedEffect(goal) { selectedGoal = goal }
-    LaunchedEffect(workoutFrequency) { selectedFrequency = workoutFrequency }
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text("Kullanıcı Profili", style = MaterialTheme.typography.titleLarge)
-            Spacer(modifier = Modifier.height(16.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)){
-                OutlinedTextField(value = ageInput, onValueChange = {ageInput = it}, label = { Text("Yaş") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1f))
-                OutlinedTextField(value = weightInput, onValueChange = {weightInput = it}, label = { Text("Kilo (kg)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1f))
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Gender Dropdown
-            ExposedDropdownMenuBox(expanded = genderExpanded, onExpandedChange = { genderExpanded = !genderExpanded }) {
-                OutlinedTextField(
-                    value = selectedGender,
-                    onValueChange = {}, 
-                    label = { Text("Cinsiyet") },
-                    readOnly = true,
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = genderExpanded) },
-                    modifier = Modifier.fillMaxWidth().menuAnchor()
-                )
-                ExposedDropdownMenu(expanded = genderExpanded, onDismissRequest = { genderExpanded = false }) {
-                    genderOptions.forEach { option ->
-                        DropdownMenuItem(text = { Text(option) }, onClick = {
-                            selectedGender = option
-                            genderExpanded = false
-                        })
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Goal Dropdown
-            ExposedDropdownMenuBox(expanded = goalExpanded, onExpandedChange = { goalExpanded = !goalExpanded }) {
-                OutlinedTextField(
-                    value = selectedGoal,
-                    onValueChange = {}, 
-                    label = { Text("Hedef") },
-                    readOnly = true,
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = goalExpanded) },
-                    modifier = Modifier.fillMaxWidth().menuAnchor()
-                )
-                ExposedDropdownMenu(expanded = goalExpanded, onDismissRequest = { goalExpanded = false }) {
-                    goalOptions.forEach { option ->
-                        DropdownMenuItem(text = { Text(option) }, onClick = {
-                            selectedGoal = option
-                            goalExpanded = false
-                        })
-                    }
-                }
-            }
-            
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Frequency Dropdown
-            ExposedDropdownMenuBox(expanded = frequencyExpanded, onExpandedChange = { frequencyExpanded = !frequencyExpanded }) {
-                OutlinedTextField(
-                    value = selectedFrequency,
-                    onValueChange = {}, 
-                    label = { Text("Antrenman Sıklığı") },
-                    readOnly = true,
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = frequencyExpanded) },
-                    modifier = Modifier.fillMaxWidth().menuAnchor()
-                )
-                ExposedDropdownMenu(expanded = frequencyExpanded, onDismissRequest = { frequencyExpanded = false }) {
-                    frequencyOptions.forEach { option ->
-                        DropdownMenuItem(text = { Text(option) }, onClick = {
-                            selectedFrequency = option
-                            frequencyExpanded = false
-                        })
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-            Button(onClick = { 
-                ageInput.toIntOrNull()?.let { viewModel.saveAge(it) }
-                weightInput.toIntOrNull()?.let { viewModel.saveWeight(it) }
-                viewModel.saveGender(selectedGender)
-                viewModel.saveGoal(selectedGoal)
-                viewModel.saveWorkoutFrequency(selectedFrequency)
-            }, modifier = Modifier.fillMaxWidth()) {
-                Text("Profili Güncelle")
-            }
-        }
-    }
-}
-
-@Composable
-fun GoalSettingCard(title: String, currentGoal: Int, label: String, onSave: (Int) -> Unit) {
-    var newGoalInput by remember { mutableStateOf("") }
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleLarge
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = stringResource(R.string.current_goal, currentGoal),
-                style = MaterialTheme.typography.bodyMedium
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-            OutlinedTextField(
-                value = newGoalInput,
-                onValueChange = { newGoalInput = it },
-                label = { Text(label) },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.fillMaxWidth()
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-            Button(
-                onClick = {
-                    val newGoal = newGoalInput.toIntOrNull()
-                    if (newGoal != null && newGoal > 0) {
-                        onSave(newGoal)
-                        newGoalInput = ""
-                    }
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(stringResource(R.string.save))
-            }
-        }
-    }
-}
-
-@Composable
-fun RemindersCard(
-    pushupReminderEnabled: Boolean,
-    pushupReminderTime: String,
-    onPushupReminderChanged: (Boolean, LocalTime?) -> Unit,
-    waterReminderEnabled: Boolean,
-    waterReminderFrequency: Int,
-    onWaterReminderChanged: (Boolean, Int?) -> Unit
-) {
-    val context = LocalContext.current
-    var showWaterFrequencyDialog by remember { mutableStateOf(false) }
-
-    fun showTimePicker() {
-        val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
-        val parsedTime = try { LocalTime.parse(pushupReminderTime, timeFormatter) } catch (e: Exception) { LocalTime.now() }
-        
-        TimePickerDialog(
-            context,
-            { _, hour: Int, minute: Int ->
-                onPushupReminderChanged(true, LocalTime.of(hour, minute))
-            },
-            parsedTime.hour,
-            parsedTime.minute,
-            true
-        ).show()
-    }
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = stringResource(R.string.reminders_title),
-                style = MaterialTheme.typography.titleLarge
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Push-up Reminder
-            ReminderItem(
-                label = stringResource(R.string.pushup_reminder),
-                enabled = pushupReminderEnabled,
-                detail = pushupReminderTime,
-                onEnabledChange = {
-                    if (it) showTimePicker() else onPushupReminderChanged(false, null)
-                },
-                onClick = { if(pushupReminderEnabled) showTimePicker() }
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Water Reminder
-            ReminderItem(
-                label = stringResource(R.string.water_reminder),
-                enabled = waterReminderEnabled,
-                detail = "${waterReminderFrequency} dk",
-                onEnabledChange = { 
-                    if (it) showWaterFrequencyDialog = true else onWaterReminderChanged(false, null)
-                },
-                onClick = { if(waterReminderEnabled) showWaterFrequencyDialog = true }
-            )
-        }
-    }
-
-    if (showWaterFrequencyDialog) {
-        WaterFrequencyDialog(
-            onDismiss = { showWaterFrequencyDialog = false },
-            onSelect = {
-                onWaterReminderChanged(true, it)
-                showWaterFrequencyDialog = false
-            }
+fun ProfileDropdown(label: String, selectedOption: String, options: List<String>, onOptionSelected: (String) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
+        OutlinedTextField(
+            modifier = Modifier.fillMaxWidth().menuAnchor(),
+            value = selectedOption,
+            onValueChange = {}, 
+            label = { Text(label) },
+            readOnly = true,
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            colors = transparentTextFieldColors()
         )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            options.forEach { option ->
+                DropdownMenuItem(text = { Text(option) }, onClick = { onOptionSelected(option); expanded = false })
+            }
+        }
     }
 }
 
 @Composable
-fun ReminderItem(label: String, enabled: Boolean, detail: String, onEnabledChange: (Boolean) -> Unit, onClick: () -> Unit) {
+fun GoalInput(label: String, currentGoal: Int, onSave: (Int) -> Unit) {
+    var value by remember { mutableStateOf("") }
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = { value = it },
+            label = { Text(label) },
+            placeholder = { Text("Mevcut: $currentGoal") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            modifier = Modifier.weight(1f),
+            colors = transparentTextFieldColors()
+        )
+        Button(onClick = { value.toIntOrNull()?.let { if(it > 0) onSave(it).also { value = "" } } }, modifier = Modifier.padding(start = 8.dp)) {
+            Text("Kaydet")
+        }
+    }
+}
+
+@Composable
+fun ReminderSwitch(label: String, enabled: Boolean, detail: String, onToggle: (Boolean, LocalTime?) -> Unit) {
+    val context = LocalContext.current
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
+        modifier = Modifier.fillMaxWidth().clickable { if(enabled) { showTimePicker(context, detail, onToggle) } else { onToggle(true, null)} },
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Column {
             Text(text = label, style = MaterialTheme.typography.bodyLarge)
             if (enabled) {
-                Text(text = detail, style = MaterialTheme.typography.bodySmall)
+                Text(text = detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
             }
         }
-        Switch(checked = enabled, onCheckedChange = onEnabledChange)
+        Switch(
+            checked = enabled, 
+            onCheckedChange = { if (it) showTimePicker(context, detail, onToggle) else onToggle(false, null) },
+            colors = SwitchDefaults.colors(checkedThumbColor = MaterialTheme.colorScheme.primary, uncheckedThumbColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+        )
     }
 }
 
-@Composable
-fun WaterFrequencyDialog(onDismiss: () -> Unit, onSelect: (Int) -> Unit) {
-    val frequencies = listOf(30, 60, 90, 120, 180, 240)
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Hatırlatıcı Sıklığı") },
-        text = {
-            Column {
-                frequencies.forEach { freq ->
-                    Text("$freq Dakikada Bir", modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onSelect(freq) }
-                        .padding(vertical = 12.dp)
-                    )
-                }
-            }
+fun showTimePicker(context: android.content.Context, currentTime: String, onTimeSelected: (Boolean, LocalTime?) -> Unit) {
+    val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+    val parsedTime = try { LocalTime.parse(currentTime, timeFormatter) } catch (e: Exception) { LocalTime.now() }
+    
+    TimePickerDialog(
+        context,
+        { _, hour: Int, minute: Int ->
+            onTimeSelected(true, LocalTime.of(hour, minute))
         },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("İptal")
-            }
-        }
-    )
+        parsedTime.hour,
+        parsedTime.minute,
+        true
+    ).show()
 }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun transparentTextFieldColors() = TextFieldDefaults.colors(
+    focusedContainerColor = Color.Transparent,
+    unfocusedContainerColor = Color.Transparent,
+    disabledContainerColor = Color.Transparent,
+)

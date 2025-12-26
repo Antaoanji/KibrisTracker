@@ -29,7 +29,7 @@ fun NavGraph(navController: NavHostController) {
         composable(Screen.Profile.route) {
             ProfileScreen()
         }
-        composable("workout_player") { 
+        composable(Screen.WorkoutPlayer.route) { 
             WorkoutPlayerScreen(onNavigateUp = { navController.navigateUp() })
         }
     }
