@@ -33,6 +33,31 @@ class SettingsManager @Inject constructor(private val dataStore: DataStore<Prefe
     val workoutFrequencyFlow: Flow<String> = dataStore.data.map { it[workoutFrequencyKey] ?: "Orta Seviye" }
     suspend fun saveWorkoutFrequency(frequency: String) = dataStore.edit { it[workoutFrequencyKey] = frequency }
 
+    // --- Active Workout Plan ---
+    private val activeWorkoutPlanKey = stringPreferencesKey("active_workout_plan")
+    val activeWorkoutPlanFlow: Flow<String?> = dataStore.data.map { it[activeWorkoutPlanKey] }
+
+    private val activeWorkoutCurrentDayKey = intPreferencesKey("active_workout_current_day")
+    val activeWorkoutCurrentDayFlow: Flow<Int> = dataStore.data.map { it[activeWorkoutCurrentDayKey] ?: 1 }
+
+    suspend fun saveActiveWorkout(plan: String, day: Int) {
+        dataStore.edit {
+            it[activeWorkoutPlanKey] = plan
+            it[activeWorkoutCurrentDayKey] = day
+        }
+    }
+
+    suspend fun saveWorkoutCurrentDay(day: Int) {
+        dataStore.edit { it[activeWorkoutCurrentDayKey] = day }
+    }
+
+    suspend fun clearActiveWorkout() {
+        dataStore.edit {
+            it.remove(activeWorkoutPlanKey)
+            it.remove(activeWorkoutCurrentDayKey)
+        }
+    }
+
     // --- Last Completed Workout Summary ---
     private val lastWorkoutSummaryTitleKey = stringPreferencesKey("last_workout_summary_title")
     private val lastWorkoutSummaryTimeKey = intPreferencesKey("last_workout_summary_time")
@@ -73,6 +98,20 @@ class SettingsManager @Inject constructor(private val dataStore: DataStore<Prefe
 
     suspend fun saveDailyWaterGoal(goal: Int) {
         dataStore.edit { it[dailyWaterGoalKey] = goal }
+    }
+
+    // --- Workout Reminder ---
+    private val workoutReminderEnabledKey = booleanPreferencesKey("workout_reminder_enabled")
+    val workoutReminderEnabledFlow: Flow<Boolean> = dataStore.data.map { it[workoutReminderEnabledKey] ?: false }
+
+    private val workoutReminderTimeKey = stringPreferencesKey("workout_reminder_time")
+    val workoutReminderTimeFlow: Flow<String> = dataStore.data.map { it[workoutReminderTimeKey] ?: "19:00" } // Default 19:00
+
+    suspend fun saveWorkoutReminder(enabled: Boolean, time: String) {
+        dataStore.edit {
+            it[workoutReminderEnabledKey] = enabled
+            it[workoutReminderTimeKey] = time
+        }
     }
 
     // --- Push-up Reminder ---

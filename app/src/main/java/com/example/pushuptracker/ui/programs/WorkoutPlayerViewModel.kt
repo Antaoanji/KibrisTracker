@@ -45,13 +45,13 @@ class WorkoutPlayerViewModel @Inject constructor(
     private fun loadStateAndStart() {
         val workout = workoutHolder.workout
         if (workout == null || workout.exercises.isEmpty() || workoutHolder.currentExerciseIndex >= workout.exercises.size) {
-            finishWorkout(true)
+            finishWorkout(true) // Entire plan finished
             return
         }
 
-        if (workoutHolder.currentExerciseIndex == 0) { // Start time only at the very beginning
-            startTimeMillis = System.currentTimeMillis()
-        }
+        // Start timer at the beginning of every workout session
+        startTimeMillis = System.currentTimeMillis()
+
         val exercise = workout.exercises[workoutHolder.currentExerciseIndex]
         _workoutState.value = WorkoutState.InProgress(
             exercise = exercise,
@@ -78,7 +78,7 @@ class WorkoutPlayerViewModel @Inject constructor(
                 val nextExercise = workout.exercises[workoutHolder.currentExerciseIndex]
                 startRest(currentExercise.restTimeSeconds, nextExercise, 1)
             } else {
-                finishWorkout(false)
+                finishWorkout(false) // Day finished, not whole plan
             }
         }
     }
@@ -91,15 +91,16 @@ class WorkoutPlayerViewModel @Inject constructor(
         totalCaloriesBurned += caloriesForSet
     }
 
-    private fun finishWorkout(isFinished: Boolean) {
+    private fun finishWorkout(isPlanFinished: Boolean) {
         val totalTimeMillis = System.currentTimeMillis() - startTimeMillis
-        val totalTimeMinutes = (totalTimeMillis / 1000 / 60).toInt()
+        val totalTimeMinutes = (totalTimeMillis / 60000).toInt()
         val finalCaloriesBurned = totalCaloriesBurned.toInt()
 
         _workoutState.value = WorkoutState.Finished(totalTimeMinutes, finalCaloriesBurned)
-        audioCoach.speak("Antrenman tamamlandı!")
+        audioCoach.announceExercise("Antrenman tamamlandı!")
 
         viewModelScope.launch {
+            // Save workout summary
             workoutHolder.workout?.title?.let {
                 val summary = WorkoutSummary(
                     title = it,
@@ -108,27 +109,34 @@ class WorkoutPlayerViewModel @Inject constructor(
                     timestamp = System.currentTimeMillis()
                 )
                 settingsManager.saveLastWorkoutSummary(summary)
-                if(!isFinished) settingsManager.incrementCurrentStreak() // Increment streak only when a day is finished
             }
-            if (isFinished) {
+
+            if (isPlanFinished || workoutHolder.currentDay.value >= 7) {
+                // The whole 7-day plan is finished
+                settingsManager.clearActiveWorkout()
                 workoutHolder.clearWorkout()
+                 settingsManager.incrementCurrentStreak() // Increment streak on the last day too
             } else {
-                workoutHolder.startNextDay()
+                // Only a day is finished, advance to the next day
+                val nextDay = workoutHolder.currentDay.value + 1
+                settingsManager.saveWorkoutCurrentDay(nextDay)
+                workoutHolder.startNextDay() // This will also reset daily progress in the holder
+                settingsManager.incrementCurrentStreak()
             }
         }
     }
 
     private fun startRest(duration: Int, nextExercise: Exercise, nextSet: Int) {
         timerJob?.cancel()
-        audioCoach.speak("Sıradaki: ${nextExercise.name}")
         timerJob = viewModelScope.launch {
-            delay(1500) // Small delay to let the announcement finish
             var remainingTime = duration
             val initialDuration = if (duration > 0) duration else 1
+            var countdownStarted = false
             while (remainingTime > 0) {
                 _workoutState.value = WorkoutState.Resting(nextExercise, nextSet, remainingTime, initialDuration)
-                if (remainingTime <= 5) {
-                    audioCoach.speak(remainingTime.toString())
+                if (remainingTime <= 3 && !countdownStarted) {
+                    countdownStarted = true
+                    audioCoach.playCountdown()
                 }
                 delay(1000)
                 remainingTime--

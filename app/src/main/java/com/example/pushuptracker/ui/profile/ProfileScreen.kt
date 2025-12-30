@@ -64,6 +64,8 @@ fun ProfileScreen(viewModel: ProfileViewModel = hiltViewModel()) {
     val workoutFrequency by viewModel.workoutFrequency.collectAsStateWithLifecycle("Orta Seviye")
     val dailyGoal by viewModel.dailyGoal.collectAsStateWithLifecycle(50)
     val dailyWaterGoal by viewModel.dailyWaterGoal.collectAsStateWithLifecycle(2000)
+    val workoutReminderEnabled by viewModel.workoutReminderEnabled.collectAsStateWithLifecycle(false)
+    val workoutReminderTime by viewModel.workoutReminderTime.collectAsStateWithLifecycle("19:00")
     val pushupReminderEnabled by viewModel.pushupReminderEnabled.collectAsStateWithLifecycle(false)
     val pushupReminderTime by viewModel.pushupReminderTime.collectAsStateWithLifecycle("18:00")
     val waterReminderEnabled by viewModel.waterReminderEnabled.collectAsStateWithLifecycle(false)
@@ -76,6 +78,7 @@ fun ProfileScreen(viewModel: ProfileViewModel = hiltViewModel()) {
     var selectedFrequency by remember(workoutFrequency) { mutableStateOf(workoutFrequency) }
     var showResetDialog by remember { mutableStateOf(false) }
     var showCheckAnimation by remember { mutableStateOf(false) }
+    var showWaterReminderDialog by remember { mutableStateOf(false) }
 
     if (showResetDialog) {
         AlertDialog(
@@ -84,9 +87,9 @@ fun ProfileScreen(viewModel: ProfileViewModel = hiltViewModel()) {
             text = { Text("Bu işlem geri alınamaz. Tüm ilerlemeniz, hedefleriniz ve ayarlarınız silinecektir. Emin misiniz?") },
             confirmButton = {
                 Button(
-                    onClick = { 
+                    onClick = {
                         viewModel.resetAllUserData()
-                        showResetDialog = false 
+                        showResetDialog = false
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) {
@@ -97,6 +100,17 @@ fun ProfileScreen(viewModel: ProfileViewModel = hiltViewModel()) {
                 TextButton(onClick = { showResetDialog = false }) {
                     Text("İptal")
                 }
+            }
+        )
+    }
+
+    if (showWaterReminderDialog) {
+        WaterReminderDialog(
+            currentFrequency = waterReminderFrequency,
+            onDismiss = { showWaterReminderDialog = false },
+            onConfirm = { frequency ->
+                viewModel.setWaterReminder(true, frequency)
+                showWaterReminderDialog = false
             }
         )
     }
@@ -124,7 +138,7 @@ fun ProfileScreen(viewModel: ProfileViewModel = hiltViewModel()) {
                     Spacer(modifier = Modifier.height(8.dp))
                     ProfileDropdown(label = "Antrenman Sıklığı", selectedOption = selectedFrequency, options = listOf("Yeni Başlayan", "Orta Seviye", "Düzenli")) { selectedFrequency = it }
                     Spacer(modifier = Modifier.height(16.dp))
-                    Button(onClick = { 
+                    Button(onClick = {
                         ageInput.toIntOrNull()?.let { viewModel.saveAge(it) }
                         weightInput.toIntOrNull()?.let { viewModel.saveWeight(it) }
                         viewModel.saveGender(selectedGender)
@@ -141,13 +155,13 @@ fun ProfileScreen(viewModel: ProfileViewModel = hiltViewModel()) {
                     HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
                     SectionTitle(title = "Günlük Hedefler")
                     Spacer(modifier = Modifier.height(16.dp))
-                    GoalInput(label = "Günlük Şınav Hedefi", currentGoal = dailyGoal) { 
-                        viewModel.saveDailyGoal(it) 
+                    GoalInput(label = "Günlük Şınav Hedefi", currentGoal = dailyGoal) {
+                        viewModel.saveDailyGoal(it)
                         showCheckAnimation = true
                     }
                     Spacer(modifier = Modifier.height(16.dp))
-                    GoalInput(label = "Günlük Su Hedefi (ml)", currentGoal = dailyWaterGoal) { 
-                        viewModel.saveDailyWaterGoal(it) 
+                    GoalInput(label = "Günlük Su Hedefi (ml)", currentGoal = dailyWaterGoal) {
+                        viewModel.saveDailyWaterGoal(it)
                         showCheckAnimation = true
                     }
                 }
@@ -157,11 +171,18 @@ fun ProfileScreen(viewModel: ProfileViewModel = hiltViewModel()) {
                     HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
                     SectionTitle(title = "Hatırlatıcılar")
                     Spacer(modifier = Modifier.height(16.dp))
+                    ReminderSwitch(label = "Antrenman Hatırlatıcısı", enabled = workoutReminderEnabled, detail = workoutReminderTime) { enabled, time -> viewModel.setWorkoutReminder(enabled, time) }
+                    Spacer(modifier = Modifier.height(16.dp))
                     ReminderSwitch(label = "Şınav Hatırlatıcısı", enabled = pushupReminderEnabled, detail = pushupReminderTime) { enabled, time -> viewModel.setPushupReminder(enabled, time) }
                     Spacer(modifier = Modifier.height(16.dp))
-                    ReminderSwitch(label = "Su Hatırlatıcısı", enabled = waterReminderEnabled, detail = "${waterReminderFrequency} dk") { enabled, _ -> viewModel.setWaterReminder(enabled, null) }
+                    WaterReminderItem(
+                        enabled = waterReminderEnabled,
+                        frequency = waterReminderFrequency,
+                        onEnable = { showWaterReminderDialog = true },
+                        onDisable = { viewModel.setWaterReminder(false, null) }
+                    )
                 }
-                
+
                 // --- Reset Section ---
                 item {
                     HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
@@ -203,7 +224,7 @@ fun ProfileDropdown(label: String, selectedOption: String, options: List<String>
         OutlinedTextField(
             modifier = Modifier.fillMaxWidth().menuAnchor(),
             value = selectedOption,
-            onValueChange = {}, 
+            onValueChange = {},
             label = { Text(label) },
             readOnly = true,
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
@@ -251,7 +272,7 @@ fun ReminderSwitch(label: String, enabled: Boolean, detail: String, onToggle: (B
             }
         }
         Switch(
-            checked = enabled, 
+            checked = enabled,
             onCheckedChange = { if (it) showTimePicker(context, detail, onToggle) else onToggle(false, null) },
             colors = SwitchDefaults.colors(checkedThumbColor = MaterialTheme.colorScheme.primary, uncheckedThumbColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
         )
@@ -261,7 +282,7 @@ fun ReminderSwitch(label: String, enabled: Boolean, detail: String, onToggle: (B
 fun showTimePicker(context: android.content.Context, currentTime: String, onTimeSelected: (Boolean, LocalTime?) -> Unit) {
     val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
     val parsedTime = try { LocalTime.parse(currentTime, timeFormatter) } catch (e: Exception) { LocalTime.now() }
-    
+
     TimePickerDialog(
         context,
         { _, hour: Int, minute: Int ->
@@ -271,6 +292,84 @@ fun showTimePicker(context: android.content.Context, currentTime: String, onTime
         parsedTime.minute,
         true
     ).show()
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun WaterReminderDialog(
+    currentFrequency: Int,
+    onDismiss: () -> Unit,
+    onConfirm: (Int) -> Unit
+) {
+    var frequencyInput by remember { mutableStateOf(currentFrequency.toString()) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Su Hatırlatıcısı Ayarla") },
+        text = {
+            OutlinedTextField(
+                value = frequencyInput,
+                onValueChange = { frequencyInput = it },
+                label = { Text("Sıklık (dakika)") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.fillMaxWidth(),
+                suffix = { Text("dk") }
+            )
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val frequencyMinutes = frequencyInput.toIntOrNull() ?: currentFrequency
+                    onConfirm(frequencyMinutes)
+                }
+            ) {
+                Text("Kaydet")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("İptal") }
+        }
+    )
+}
+
+@Composable
+fun WaterReminderItem(
+    enabled: Boolean,
+    frequency: Int,
+    onEnable: () -> Unit,
+    onDisable: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().clickable { if (!enabled) onEnable() else onDisable() },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Column {
+            Text("Su Hatırlatıcısı", style = MaterialTheme.typography.bodyLarge)
+            if (enabled) {
+                val hours = frequency / 60
+                val minutes = frequency % 60
+                val frequencyText = when {
+                    hours > 0 && minutes > 0 -> "$hours saat $minutes dk"
+                    hours > 0 -> "$hours saat"
+                    else -> "$minutes dk"
+                }
+                Text(
+                    text = "Her $frequencyText bir",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+        Switch(
+            checked = enabled,
+            onCheckedChange = { if (it) onEnable() else onDisable() },
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = MaterialTheme.colorScheme.primary,
+                uncheckedThumbColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+            )
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

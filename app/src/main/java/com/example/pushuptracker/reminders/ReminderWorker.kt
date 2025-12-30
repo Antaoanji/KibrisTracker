@@ -8,6 +8,7 @@ class ReminderWorker(appContext: Context, workerParams: WorkerParameters) : Work
 
     companion object {
         const val KEY_REMINDER_TYPE = "reminder_type"
+        const val TYPE_WORKOUT = "workout"
         const val TYPE_PUSHUP = "pushup"
         const val TYPE_WATER = "water"
     }
@@ -16,11 +17,31 @@ class ReminderWorker(appContext: Context, workerParams: WorkerParameters) : Work
         val reminderType = inputData.getString(KEY_REMINDER_TYPE)
             ?: return Result.failure()
 
-        val title = if (reminderType == TYPE_PUSHUP) "Şınav Zamanı!" else "Su Molası!"
-        val content = if (reminderType == TYPE_PUSHUP) "Bugünkü şınav hedefini unutma!" else "Bir bardak su içmenin tam sırası."
+        val title = when (reminderType) {
+            TYPE_WORKOUT -> "Antrenman Zamanı!"
+            TYPE_PUSHUP -> "Şınav Zamanı!"
+            TYPE_WATER -> "Su Molası!"
+            else -> "Hatırlatıcı"
+        }
+        
+        val content = when (reminderType) {
+            TYPE_WORKOUT -> "Bugünkü antrenmanını tamamlama zamanı geldi!"
+            TYPE_PUSHUP -> "Bugünkü şınav hedefini unutma!"
+            TYPE_WATER -> "Bir bardak su içmenin tam sırası."
+            else -> ""
+        }
 
-        NotificationHelper.createNotificationChannel(applicationContext)
-        NotificationHelper.sendReminderNotification(applicationContext, title, content)
+        val notificationId = when (reminderType) {
+            TYPE_WORKOUT -> NotificationHelper.WORKOUT_REMINDER_ID
+            TYPE_PUSHUP -> NotificationHelper.PUSHUP_REMINDER_ID
+            TYPE_WATER -> NotificationHelper.WATER_REMINDER_ID
+            else -> -1
+        }
+
+        if (notificationId != -1) {
+            NotificationHelper.createNotificationChannel(applicationContext, reminderType)
+            NotificationHelper.sendReminderNotification(applicationContext, title, content, notificationId)
+        }
 
         return Result.success()
     }

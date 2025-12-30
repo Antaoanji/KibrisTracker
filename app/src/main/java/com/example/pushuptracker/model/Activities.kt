@@ -8,7 +8,7 @@ object Activities {
         id = "pushups",
         name = "Şınav",
         imageRes = R.drawable.pushup_main,
-        iconRes = R.drawable.ic_fire_workout, // Corrected to a valid drawable
+        iconRes = R.drawable.logo, // Corrected to a valid drawable
         unit = "tekrar"
     )
 
@@ -16,7 +16,7 @@ object Activities {
         id = "water",
         name = "Su",
         imageRes = R.drawable.water_main,
-        iconRes = R.drawable.ic_fire_water, // Corrected to a valid drawable
+        iconRes = R.drawable.logo, // Corrected to a valid drawable
         unit = "ml"
     )
 

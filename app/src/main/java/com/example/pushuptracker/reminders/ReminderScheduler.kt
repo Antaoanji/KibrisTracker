@@ -16,8 +16,38 @@ class ReminderScheduler @Inject constructor(@param:ApplicationContext private va
     private val workManager = WorkManager.getInstance(context)
 
     private companion object {
+        const val WORKOUT_REMINDER_TAG = "workout_reminder_tag"
         const val PUSHUP_REMINDER_TAG = "pushup_reminder_tag"
         const val WATER_REMINDER_TAG = "water_reminder_tag"
+    }
+
+    fun scheduleDailyWorkoutReminder(time: LocalTime) {
+        val now = ZonedDateTime.now()
+        var scheduleTime = now.with(time)
+
+        if (now.isAfter(scheduleTime)) {
+            scheduleTime = scheduleTime.plusDays(1)
+        }
+
+        val initialDelay = Duration.between(now, scheduleTime).toMillis()
+
+        val inputData = workDataOf(ReminderWorker.KEY_REMINDER_TYPE to ReminderWorker.TYPE_WORKOUT)
+
+        val workRequest = PeriodicWorkRequestBuilder<ReminderWorker>(1, TimeUnit.DAYS)
+            .setInitialDelay(initialDelay, TimeUnit.MILLISECONDS)
+            .setInputData(inputData)
+            .addTag(WORKOUT_REMINDER_TAG)
+            .build()
+
+        workManager.enqueueUniquePeriodicWork(
+            WORKOUT_REMINDER_TAG,
+            ExistingPeriodicWorkPolicy.UPDATE,
+            workRequest
+        )
+    }
+
+    fun cancelWorkoutReminder() {
+        workManager.cancelUniqueWork(WORKOUT_REMINDER_TAG)
     }
 
     fun scheduleDailyPushupReminder(time: LocalTime) {

@@ -4,6 +4,7 @@ import android.content.Context
 import android.speech.tts.TextToSpeech
 import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.delay
 import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -37,11 +38,26 @@ class AudioCoach @Inject constructor(
         }
     }
 
-    fun speak(text: String) {
+    fun announceExercise(exerciseName: String) {
         if (isInitialized) {
-            tts?.speak(text, TextToSpeech.QUEUE_ADD, null, null)
+            val textToSpeak = "Sıradaki: $exerciseName"
+            tts?.speak(textToSpeak, TextToSpeech.QUEUE_FLUSH, null, null)
         } else {
-            Log.w("AudioCoach", "TTS not ready to speak.")
+            Log.w("AudioCoach", "TTS not ready for announcement.")
+        }
+    }
+
+    suspend fun playCountdown() {
+        if (isInitialized) {
+            // Clear any ongoing speech
+            tts?.stop()
+            // Speak countdown with delays
+            for (i in 3 downTo 1) {
+                tts?.speak(i.toString(), TextToSpeech.QUEUE_ADD, null, i.toString())
+                delay(1000) // Wait for 1 second between numbers
+            }
+        } else {
+            Log.w("AudioCoach", "TTS not ready for countdown.")
         }
     }
 
@@ -54,5 +70,6 @@ class AudioCoach @Inject constructor(
             tts?.stop()
             tts?.shutdown()
         }
+        isInitialized = false
     }
 }

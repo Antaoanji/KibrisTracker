@@ -17,7 +17,9 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import javax.inject.Inject
@@ -57,8 +59,9 @@ class HomeViewModel @Inject constructor(
     val homeScreenState = combine(
         pushupDataFlow,
         waterDataFlow,
-        settingsManager.currentStreakFlow
-    ) { pushupData, waterData, workoutStreak ->
+        settingsManager.currentStreakFlow,
+        settingsManager.lastWorkoutSummaryFlow // Added to check workout completion date
+    ) { pushupData, waterData, workoutStreak, lastWorkoutSummary ->
         val (todayPushups, allPushups, dailyPushupGoal) = pushupData
         val (todayWater, allWater, dailyWaterGoal) = waterData
 
@@ -77,9 +80,18 @@ class HomeViewModel @Inject constructor(
             type = Streak.Type.WATER
         )
 
+        val wasWorkoutCompletedToday = if (lastWorkoutSummary != null) {
+            val lastWorkoutDate = Instant.ofEpochMilli(lastWorkoutSummary.timestamp)
+                .atZone(ZoneId.systemDefault())
+                .toLocalDate()
+            lastWorkoutDate == LocalDate.now()
+        } else {
+            false
+        }
+
         val workoutStreakData = Streak(
             count = workoutStreak,
-            isCompletedToday = false, // This could be improved if we track workout dates
+            isCompletedToday = wasWorkoutCompletedToday, // Fixed!
             type = Streak.Type.WORKOUT
         )
 
@@ -92,14 +104,19 @@ class HomeViewModel @Inject constructor(
     private suspend fun checkAndResetStreaks() {
         val lastWorkoutSummary = settingsManager.lastWorkoutSummaryFlow.first()
         if (lastWorkoutSummary != null) {
-            val lastWorkoutDate = LocalDate.ofEpochDay(lastWorkoutSummary.timestamp / (1000 * 60 * 60 * 24))
+            val lastWorkoutDate = Instant.ofEpochMilli(lastWorkoutSummary.timestamp)
+                .atZone(ZoneId.systemDefault())
+                .toLocalDate()
             val daysBetween = ChronoUnit.DAYS.between(lastWorkoutDate, LocalDate.now())
+            // Reset if the last workout was not yesterday or today
             if (daysBetween > 1) {
                 settingsManager.saveCurrentStreak(0)
             }
+        } else {
+            // If there's no workout history, streak must be 0.
+            settingsManager.saveCurrentStreak(0)
         }
     }
-
 
     fun getTodayRecord(activityId: String): Flow<ActivityRecord?> {
         return when (activityId) {

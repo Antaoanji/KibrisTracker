@@ -37,6 +37,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -49,11 +50,9 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -61,8 +60,11 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.airbnb.lottie.compose.LottieAnimation
+import com.airbnb.lottie.compose.LottieClipSpec
 import com.airbnb.lottie.compose.LottieCompositionSpec
+import com.airbnb.lottie.compose.LottieConstants
 import com.airbnb.lottie.compose.animateLottieCompositionAsState
+import com.airbnb.lottie.compose.rememberLottieAnimatable
 import com.airbnb.lottie.compose.rememberLottieComposition
 import com.example.pushuptracker.R
 import com.example.pushuptracker.model.Activities
@@ -139,14 +141,25 @@ fun HomeScreen(viewModel: HomeViewModel = hiltViewModel()) {
             }
 
             if (showCelebration) {
-                val lottieComposition by rememberLottieComposition(LottieCompositionSpec.RawRes(R.raw.celebration))
-                val lottieProgress by animateLottieCompositionAsState(composition = lottieComposition)
+                val trophyComposition by rememberLottieComposition(LottieCompositionSpec.RawRes(R.raw.trophy))
+                val trophyProgress by animateLottieCompositionAsState(composition = trophyComposition)
                 LottieAnimation(
-                    composition = lottieComposition,
-                    progress = { lottieProgress },
+                    composition = trophyComposition,
+                    progress = { trophyProgress },
                     modifier = Modifier.fillMaxSize()
                 )
-                if (lottieProgress == 1.0f) {
+
+                val firewallComposition by rememberLottieComposition(LottieCompositionSpec.RawRes(R.raw.firewall))
+                val firewallProgress by animateLottieCompositionAsState(composition = firewallComposition)
+                LottieAnimation(
+                    composition = firewallComposition,
+                    progress = { firewallProgress },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.BottomCenter)
+                )
+
+                if (trophyProgress == 1.0f) {
                     showCelebration = false
                 }
             }
@@ -156,36 +169,51 @@ fun HomeScreen(viewModel: HomeViewModel = hiltViewModel()) {
 
 @Composable
 fun StreakIcon(streak: Streak) {
-    val infiniteTransition = rememberInfiniteTransition(label = "streak_pulse")
+    val composition by rememberLottieComposition(
+        when (streak.type) {
+            Streak.Type.PUSHUP -> LottieCompositionSpec.RawRes(R.raw.redfire)
+            Streak.Type.WATER -> LottieCompositionSpec.RawRes(R.raw.bluefire)
+            Streak.Type.WORKOUT -> LottieCompositionSpec.RawRes(R.raw.greenfire)
+        }
+    )
+    
+    val animatable = rememberLottieAnimatable()
 
-    val scale by infiniteTransition.animateFloat(
+    LaunchedEffect(composition, streak.isCompletedToday) {
+        if (composition == null) return@LaunchedEffect
+
+        if (streak.isCompletedToday) {
+             animatable.animate(
+                composition = composition,
+                iterations = LottieConstants.IterateForever
+            )
+        } else {
+            animatable.snapTo(composition, 0f)
+        }
+    }
+
+    val alpha by animateFloatAsState(
+        targetValue = if (streak.isCompletedToday) 1f else 0.5f, 
+        animationSpec = tween(500),
+        label = "streak_alpha"
+    )
+    
+    val scale by rememberInfiniteTransition(label = "streak_pulse").animateFloat(
         initialValue = 1f,
-        targetValue = if (streak.isCompletedToday) 1.1f else 1f, 
+        targetValue = if (streak.isCompletedToday) 1.1f else 1f,
         animationSpec = infiniteRepeatable(
             animation = tween(800),
             repeatMode = RepeatMode.Reverse
         ),
         label = "streak_scale"
     )
-    
-    val alpha by animateFloatAsState(
-        targetValue = if (streak.isCompletedToday) 1f else 0.5f, 
-        animationSpec = tween(500),
-        label = "streak_alpha"
-    )
-
-    val painter = when (streak.type) {
-        Streak.Type.PUSHUP -> painterResource(id = R.drawable.ic_fire)
-        Streak.Type.WATER -> painterResource(id = R.drawable.ic_fire_water)
-        Streak.Type.WORKOUT -> painterResource(id = R.drawable.ic_fire_workout)
-    }
 
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(horizontal = 8.dp)) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.size(42.dp)) {
-            Image(
-                painter = painter,
-                contentDescription = "Streak Icon",
-                modifier = Modifier.size(38.dp).scale(scale).alpha(alpha)
+            LottieAnimation(
+                composition = composition,
+                progress = { animatable.progress },
+                modifier = Modifier.size(38.dp).alpha(alpha).scale(scale)
             )
             if (streak.count > 0) {
                 Box(

@@ -27,6 +27,8 @@ class ProfileViewModel @Inject constructor(
     val workoutFrequency: Flow<String> = settingsManager.workoutFrequencyFlow
     val dailyGoal: Flow<Int> = settingsManager.dailyGoalFlow
     val dailyWaterGoal: Flow<Int> = settingsManager.dailyWaterGoalFlow
+    val workoutReminderEnabled: Flow<Boolean> = settingsManager.workoutReminderEnabledFlow
+    val workoutReminderTime: Flow<String> = settingsManager.workoutReminderTimeFlow
     val pushupReminderEnabled: Flow<Boolean> = settingsManager.pushupReminderEnabledFlow
     val pushupReminderTime: Flow<String> = settingsManager.pushupReminderTimeFlow
     val waterReminderEnabled: Flow<Boolean> = settingsManager.waterReminderEnabledFlow
@@ -39,6 +41,11 @@ class ProfileViewModel @Inject constructor(
     fun saveWorkoutFrequency(frequency: String) = viewModelScope.launch { settingsManager.saveWorkoutFrequency(frequency) }
     fun saveDailyGoal(goal: Int) = viewModelScope.launch { settingsManager.saveDailyGoal(goal) }
     fun saveDailyWaterGoal(goal: Int) = viewModelScope.launch { settingsManager.saveDailyWaterGoal(goal) }
+
+    fun setWorkoutReminder(enabled: Boolean, time: LocalTime?) = viewModelScope.launch {
+        val timeString = time?.format(DateTimeFormatter.ofPattern("HH:mm")) ?: settingsManager.workoutReminderTimeFlow.first()
+        settingsManager.saveWorkoutReminder(enabled, timeString)
+    }
 
     fun setPushupReminder(enabled: Boolean, time: LocalTime?) = viewModelScope.launch {
         val timeString = time?.format(DateTimeFormatter.ofPattern("HH:mm")) ?: settingsManager.pushupReminderTimeFlow.first()
