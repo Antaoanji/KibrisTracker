@@ -8,8 +8,8 @@ import com.example.pushuptracker.model.ActivityRecord
 
 @Database(
     entities = [ActivityRecord::class],
-    version = 1, 
-    exportSchema = false
+    version = 6, // Incremented version for the new 'note' column
+    exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun pushupDao(): PushupDao

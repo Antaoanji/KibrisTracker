@@ -1,20 +1,24 @@
 package com.example.pushuptracker.ui.stats
 
+import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.pushuptracker.data.HealthConnectManager
 import com.example.pushuptracker.data.repo.PushupRepo
 import com.example.pushuptracker.model.ActivityRecord
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import java.time.DayOfWeek
 import java.time.LocalDate
-import java.time.format.TextStyle
-import java.time.temporal.TemporalAdjusters
+import java.time.temporal.ChronoUnit
+import java.time.temporal.WeekFields
 import java.util.Locale
 import javax.inject.Inject
 
@@ -22,95 +26,167 @@ enum class ChartTimeSpan { WEEK, YEAR }
 enum class ChartType { LINE, BAR }
 
 data class ChartUiState(
-    val records: List<ActivityRecord> = emptyList()
+    val records: List<ActivityRecord> = emptyList(),
+    val yAxisLabel: String = "Tekrar"
 )
 
 data class OverallStats(
     val totalPushups: Int = 0,
     val totalWater: Int = 0,
-    val currentStreak: Int = 0,
-    val thisWeekTotalPushups: Int = 0,
-    val lastWeekTotalPushups: Int = 0,
-    val thisMonthTotalPushups: Int = 0,
-    val lastMonthTotalPushups: Int = 0
+    val currentStreak: Int = 0
 )
 
+data class ChangeStats(
+    val previous: Int = 0,
+    val current: Int = 0
+) {
+    val change: Int
+        get() = current - previous
+}
+
+@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class StatsViewModel @Inject constructor(
-    private val pushupRepo: PushupRepo
+    private val pushupRepo: PushupRepo,
+    private val healthConnectManager: HealthConnectManager
 ) : ViewModel() {
 
     val chartTimeSpan = MutableStateFlow(ChartTimeSpan.WEEK)
-    val chartType = MutableStateFlow(ChartType.LINE)
+    val chartType = MutableStateFlow(ChartType.BAR)
     val editDialogState = MutableStateFlow<ActivityRecord?>(null)
 
-    val chartUiState = combine(
-        pushupRepo.getAllRecords(),
-        chartTimeSpan
-    ) { allRecords, timeSpan ->
-        val records = if (timeSpan == ChartTimeSpan.WEEK) {
-            val startOfWeek = LocalDate.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
-            val weekDates = (0..6).map { startOfWeek.plusDays(it.toLong()) }
-            weekDates.map {
-                allRecords.find { record -> LocalDate.parse(record.date) == it } ?: ActivityRecord("pushup", 0.0, it.toString())
-            }
-        } else {
-            val startOfYear = LocalDate.now().withDayOfYear(1)
-            (0..11).map { 
-                val month = startOfYear.plusMonths(it.toLong())
-                val monthlyTotal = allRecords.filter { record ->
-                    val recordDate = LocalDate.parse(record.date)
-                    recordDate.month == month.month && recordDate.year == month.year
-                }.sumOf { it.value }
-                ActivityRecord("pushup", monthlyTotal, month.toString())
+    private val _selectedExercise = MutableStateFlow("pushup")
+    val selectedExercise = _selectedExercise.asStateFlow()
+
+    private val _healthSessions = MutableStateFlow<List<ExerciseSessionRecord>>(emptyList())
+    val healthSessions = _healthSessions.asStateFlow()
+
+    private val _hasHealthPermissions = MutableStateFlow(false)
+    val hasHealthPermissions = _hasHealthPermissions.asStateFlow()
+
+    val exerciseList = pushupRepo.getDistinctExerciseTypes()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), listOf("pushup"))
+
+    init {
+        checkHealthPermissions()
+    }
+
+    fun checkHealthPermissions() {
+        viewModelScope.launch {
+            _hasHealthPermissions.value = healthConnectManager.hasAllPermissions()
+            if (_hasHealthPermissions.value) {
+                loadHealthSessions()
             }
         }
-        ChartUiState(records)
+    }
+
+    fun loadHealthSessions() {
+        viewModelScope.launch {
+            _healthSessions.value = healthConnectManager.readExerciseSessions()
+        }
+    }
+
+    fun getHealthPermissions() = healthConnectManager.permissions
+
+    val chartUiState = combine(
+        selectedExercise,
+        chartTimeSpan
+    ) { exerciseType, timeSpan ->
+        Pair(exerciseType, timeSpan)
+    }.flatMapLatest { (exerciseType, timeSpan) ->
+        pushupRepo.getAllRecordsForType(exerciseType).map {
+            val yAxisLabel = if (exerciseType == "pushup") "Tekrar" else "Ağırlık (kg)"
+            ChartUiState(it, yAxisLabel)
+        }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ChartUiState())
 
-    val overallStats = pushupRepo.getAllRecords().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()).combine(chartTimeSpan) { records, timeSpan ->
-        val today = LocalDate.now()
-        val totalPushups = records.sumOf { it.value }.toInt()
+    val overallStats = pushupRepo.getAllRecords().map { records ->
+        val totalPushups = records.filter { it.type == "pushup" }.sumOf { it.value }.toInt()
+        val totalWater = records.filter { it.type == "water" }.sumOf { it.value }.toInt()
+        val pushupDates = records.filter { it.type == "pushup" && it.value > 0 }
+            .map { LocalDate.parse(it.date) }.distinct().sortedDescending()
 
-        val thisWeekTotalPushups = records.filter {
-            val recordDate = LocalDate.parse(it.date)
-            recordDate.isAfter(today.minusWeeks(1))
-        }.sumOf { it.value }.toInt()
+        var currentStreak = 0
+        if (pushupDates.isNotEmpty()) {
+            var currentDate = LocalDate.now()
+            if (pushupDates.first().isEqual(currentDate) || pushupDates.first().isEqual(currentDate.minusDays(1))) {
+                currentStreak = 1
+                var lastDate = pushupDates.first()
 
-        val lastWeekTotalPushups = records.filter {
-            val recordDate = LocalDate.parse(it.date)
-            recordDate.isAfter(today.minusWeeks(2)) && recordDate.isBefore(today.minusWeeks(1))
-        }.sumOf { it.value }.toInt()
-
-        val thisMonthTotalPushups = records.filter {
-            val recordDate = LocalDate.parse(it.date)
-            recordDate.isAfter(today.minusMonths(1))
-        }.sumOf { it.value }.toInt()
-
-        val lastMonthTotalPushups = records.filter {
-            val recordDate = LocalDate.parse(it.date)
-            recordDate.isAfter(today.minusMonths(2)) && recordDate.isBefore(today.minusMonths(1))
-        }.sumOf { it.value }.toInt()
-
-        OverallStats(
-            totalPushups = totalPushups,
-            thisWeekTotalPushups = thisWeekTotalPushups,
-            lastWeekTotalPushups = lastWeekTotalPushups,
-            thisMonthTotalPushups = thisMonthTotalPushups,
-            lastMonthTotalPushups = lastMonthTotalPushups
-        )
+                for (i in 1 until pushupDates.size) {
+                    val date = pushupDates[i]
+                    if (lastDate.minusDays(1).isEqual(date)) {
+                        currentStreak++
+                        lastDate = date
+                    } else {
+                        break
+                    }
+                }
+                if (!pushupDates.contains(LocalDate.now()) && !pushupDates.contains(LocalDate.now().minusDays(1))) {
+                    currentStreak = 0
+                }
+            }
+        }
+        OverallStats(totalPushups = totalPushups, totalWater = totalWater, currentStreak = currentStreak)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), OverallStats())
+
+
+    val weeklyChange = selectedExercise.flatMapLatest { exerciseType ->
+        pushupRepo.getAllRecordsForType(exerciseType)
+    }.map { records ->
+        val today = LocalDate.now()
+        val weekFields = WeekFields.of(Locale.getDefault())
+        val startOfThisWeek = today.with(weekFields.dayOfWeek(), 1)
+        val startOfLastWeek = startOfThisWeek.minusWeeks(1)
+
+        val thisWeekValue = records.filter {
+            val date = LocalDate.parse(it.date)
+            !date.isBefore(startOfThisWeek) && date.isBefore(startOfThisWeek.plusWeeks(1))
+        }.sumOf { it.value }.toInt()
+
+        val lastWeekValue = records.filter {
+            val date = LocalDate.parse(it.date)
+            !date.isBefore(startOfLastWeek) && date.isBefore(startOfThisWeek)
+        }.sumOf { it.value }.toInt()
+
+        ChangeStats(previous = lastWeekValue, current = thisWeekValue)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ChangeStats())
+
+    val monthlyChange = selectedExercise.flatMapLatest { exerciseType ->
+        pushupRepo.getAllRecordsForType(exerciseType)
+    }.map { records ->
+        val today = LocalDate.now()
+        val startOfThisMonth = today.withDayOfMonth(1)
+        val startOfLastMonth = startOfThisMonth.minusMonths(1)
+
+        val thisMonthValue = records.filter {
+            val date = LocalDate.parse(it.date)
+            !date.isBefore(startOfThisMonth) && date.isBefore(startOfThisMonth.plusMonths(1))
+        }.sumOf { it.value }.toInt()
+
+        val lastMonthValue = records.filter {
+            val date = LocalDate.parse(it.date)
+            !date.isBefore(startOfLastMonth) && date.isBefore(startOfThisMonth)
+        }.sumOf { it.value }.toInt()
+
+        ChangeStats(previous = lastMonthValue, current = thisMonthValue)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ChangeStats())
+
+
+    fun onExerciseSelected(exercise: String) {
+        _selectedExercise.value = exercise
+    }
 
     fun setChartTimeSpan(timeSpan: ChartTimeSpan) {
         chartTimeSpan.value = timeSpan
     }
 
-    fun setChartType(chartType: ChartType) {
-        this.chartType.value = chartType
+    fun setChartType(type: ChartType) {
+        chartType.value = type
     }
 
     fun onChartEntrySelected(record: ActivityRecord) {
-        if(record.value > 0) editDialogState.value = record
+        if (record.value > 0) editDialogState.value = record
     }
 
     fun onDismissEditDialog() {
@@ -120,9 +196,11 @@ class StatsViewModel @Inject constructor(
     fun updateRecordForDate(date: String, newValue: Double) {
         viewModelScope.launch {
             if (newValue > 0) {
-                pushupRepo.updatePushupsForDate(date, newValue.toInt())
+                val record =
+                    ActivityRecord(type = selectedExercise.value, value = newValue, date = date)
+                pushupRepo.insertRecord(record)
             } else {
-                pushupRepo.deletePushupsForDate(date)
+                pushupRepo.deleteRecordForDateAndType(selectedExercise.value, date)
             }
             onDismissEditDialog()
         }

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Şınav Takip</string>
+    <string name="app_name">Kibris Tracker</string>
 
     <!-- Navigation -->
     <string name="home">Ana Sayfa</string>

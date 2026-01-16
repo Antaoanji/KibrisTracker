@@ -2,7 +2,6 @@ package com.example.pushuptracker.ui.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.pushuptracker.R
 import com.example.pushuptracker.SettingsManager
 import com.example.pushuptracker.data.repo.PushupRepo
 import com.example.pushuptracker.data.repo.WaterRepo
@@ -40,10 +39,11 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    // CRITICAL FIX: The types in combine are now correctly inferred from the Repo/DAO
     private val pushupDataFlow = combine(
-        pushupRepo.getRecordForDate(today),
-        pushupRepo.getAllRecords(),
-        settingsManager.dailyGoalFlow
+        pushupRepo.getRecordForDate(today),      // Returns Flow<ActivityRecord?>
+        pushupRepo.getAllPushupRecords(),        // Returns Flow<List<ActivityRecord>>
+        settingsManager.dailyGoalFlow          // Returns Flow<Int>
     ) { todayPushups, allPushups, dailyGoal ->
         Triple(todayPushups, allPushups, dailyGoal)
     }
@@ -56,15 +56,17 @@ class HomeViewModel @Inject constructor(
         Triple(todayWater, allWater, dailyGoal)
     }
 
+    
     val homeScreenState = combine(
         pushupDataFlow,
         waterDataFlow,
         settingsManager.currentStreakFlow,
-        settingsManager.lastWorkoutSummaryFlow // Added to check workout completion date
+        settingsManager.lastWorkoutSummaryFlow
     ) { pushupData, waterData, workoutStreak, lastWorkoutSummary ->
         val (todayPushups, allPushups, dailyPushupGoal) = pushupData
         val (todayWater, allWater, dailyWaterGoal) = waterData
 
+        // This mapping now works because allPushups is correctly a List<ActivityRecord>
         val pushupStreak = calculateCurrentStreak(allPushups.map { it.date }.toSet())
         val waterStreak = calculateCurrentStreak(allWater.map { it.date }.toSet())
 
@@ -91,7 +93,7 @@ class HomeViewModel @Inject constructor(
 
         val workoutStreakData = Streak(
             count = workoutStreak,
-            isCompletedToday = wasWorkoutCompletedToday, // Fixed!
+            isCompletedToday = wasWorkoutCompletedToday,
             type = Streak.Type.WORKOUT
         )
 
@@ -108,12 +110,11 @@ class HomeViewModel @Inject constructor(
                 .atZone(ZoneId.systemDefault())
                 .toLocalDate()
             val daysBetween = ChronoUnit.DAYS.between(lastWorkoutDate, LocalDate.now())
-            // Reset if the last workout was not yesterday or today
+
             if (daysBetween > 1) {
                 settingsManager.saveCurrentStreak(0)
             }
         } else {
-            // If there's no workout history, streak must be 0.
             settingsManager.saveCurrentStreak(0)
         }
     }
@@ -136,7 +137,7 @@ class HomeViewModel @Inject constructor(
 
     fun getTotal(activityId: String): Flow<Double> {
         return when (activityId) {
-            "pushups" -> pushupRepo.getAllRecords().map { records -> records.sumOf { it.value } }
+            "pushups" -> pushupRepo.getAllPushupRecords().map { records -> records.sumOf { it.value } }
             "water" -> waterRepo.getAllRecords().map { records -> records.sumOf { it.value } }
             else -> flowOf(0.0)
         }
@@ -155,21 +156,19 @@ class HomeViewModel @Inject constructor(
             when (activityId) {
                 "pushups" -> {
                     val goal = settingsManager.dailyGoalFlow.first()
-                    val current = getTodayRecord(activityId).first()?.value ?: 0.0
-                    val newValue = current + value
-                    pushupRepo.addPushups(newValue.toInt())
-
-                    // Check if goal was just reached
-                    onGoalReached(current < goal && newValue >= goal)
+                    val currentRecord = pushupRepo.getRecordForDate(today).first()
+                    val wasGoalReachedBefore = (currentRecord?.value ?: 0.0) >= goal
+                    val newRecord = pushupRepo.addPushups(value)
+                    val isGoalReachedNow = newRecord.value >= goal
+                    onGoalReached(!wasGoalReachedBefore && isGoalReachedNow)
                 }
                 "water" -> {
                     val goal = settingsManager.dailyWaterGoalFlow.first()
-                    val current = getTodayRecord(activityId).first()?.value ?: 0.0
-                    val newValue = current + value
-                    waterRepo.addWaterIntake(newValue.toInt())
-
-                    // Check if goal was just reached
-                    onGoalReached(current < goal && newValue >= goal)
+                    val currentRecord = waterRepo.getRecordForDate(today).first()
+                    val wasGoalReachedBefore = (currentRecord?.value ?: 0.0) >= goal
+                    val newRecord = waterRepo.addWater(value)
+                    val isGoalReachedNow = newRecord.value >= goal
+                    onGoalReached(!wasGoalReachedBefore && isGoalReachedNow)
                 }
             }
         }
@@ -183,7 +182,7 @@ class HomeViewModel @Inject constructor(
         if (!dates.contains(currentDate.toString())) {
             currentDate = currentDate.minusDays(1)
             if (!dates.contains(currentDate.toString())) {
-                return 0 // No streak if today or yesterday is missed
+                return 0
             }
         }
 

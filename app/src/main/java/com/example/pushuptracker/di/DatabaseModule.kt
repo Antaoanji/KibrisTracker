@@ -25,7 +25,7 @@ object DatabaseModule {
             context.applicationContext,
             AppDatabase::class.java,
             "activity_tracker_db"
-        ).fallbackToDestructiveMigration(true).build()
+        ).fallbackToDestructiveMigration().build()
     }
 
     @Provides

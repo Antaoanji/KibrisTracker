@@ -1,404 +1,351 @@
 package com.example.pushuptracker.ui.stats
 
 import android.graphics.Color
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.health.connect.client.HealthConnectClient
+import androidx.health.connect.client.PermissionController
+import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.pushuptracker.R
-import com.example.pushuptracker.model.ActivityRecord
 import com.github.mikephil.charting.charts.BarChart
-import com.github.mikephil.charting.charts.LineChart
 import com.github.mikephil.charting.components.XAxis
 import com.github.mikephil.charting.data.BarData
 import com.github.mikephil.charting.data.BarDataSet
 import com.github.mikephil.charting.data.BarEntry
-import com.github.mikephil.charting.data.Entry
-import com.github.mikephil.charting.data.LineData
-import com.github.mikephil.charting.data.LineDataSet
 import com.github.mikephil.charting.formatter.ValueFormatter
-import com.github.mikephil.charting.highlight.Highlight
-import com.github.mikephil.charting.listener.OnChartValueSelectedListener
+import java.time.Duration
 import java.time.LocalDate
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import java.time.format.TextStyle
-import java.util.Locale
-import kotlin.math.abs
-import kotlin.math.roundToInt
 
 @Composable
 fun StatsScreen(viewModel: StatsViewModel = hiltViewModel()) {
     val chartUiState by viewModel.chartUiState.collectAsStateWithLifecycle()
     val overallStats by viewModel.overallStats.collectAsStateWithLifecycle()
+    val weeklyChange by viewModel.weeklyChange.collectAsStateWithLifecycle()
+    val monthlyChange by viewModel.monthlyChange.collectAsStateWithLifecycle()
     val chartTimeSpan by viewModel.chartTimeSpan.collectAsStateWithLifecycle()
     val chartType by viewModel.chartType.collectAsStateWithLifecycle()
-    val editState by viewModel.editDialogState.collectAsStateWithLifecycle()
+    
+    val healthSessions by viewModel.healthSessions.collectAsStateWithLifecycle()
+    val hasHealthPermissions by viewModel.hasHealthPermissions.collectAsStateWithLifecycle()
 
-    Scaffold {
-            padding ->
+    val context = LocalContext.current
+
+    // Fix: Calling the function statically from PermissionController as requested
+    val permissionLauncher = rememberLauncherForActivityResult<Set<String>, Set<String>>(
+        contract = PermissionController.createRequestPermissionResultContract()
+    ) { grantedPermissions ->
+        viewModel.checkHealthPermissions()
+    }
+
+    Scaffold(containerColor = ComposeColor(0xFF1E1E1E)) { padding ->
         LazyColumn(
             modifier = Modifier
-                .fillMaxSize()
                 .padding(padding)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
             item {
-                OverallStatsCard(stats = overallStats)
+                OverallStatsCard(stats = overallStats, weeklyChange = weeklyChange, monthlyChange = monthlyChange)
             }
+            
             item {
-                PushupChartCard(
-                    records = chartUiState.records,
-                    timeSpan = chartTimeSpan,
-                    chartType = chartType,
-                    onTimeSpanSelected = { viewModel.setChartTimeSpan(it) },
-                    onChartTypeSelected = { viewModel.setChartType(it) },
-                    onEntrySelected = { record -> viewModel.onChartEntrySelected(record) }
+                PushupChartCard(chartUiState = chartUiState, chartTimeSpan = chartTimeSpan, chartType = chartType, viewModel = viewModel)
+            }
+
+            item {
+                HealthConnectCard(
+                    hasPermissions = hasHealthPermissions,
+                    sessions = healthSessions,
+                    onConnectClick = { 
+                        permissionLauncher.launch(viewModel.getHealthPermissions()) 
+                    },
+                    onRefreshClick = { viewModel.loadHealthSessions() }
                 )
             }
         }
-
-        editState?.let { record ->
-            EditRecordDialog(
-                record = record,
-                onDismiss = { viewModel.onDismissEditDialog() },
-                onSave = { newValue -> viewModel.updateRecordForDate(record.date, newValue) }
-            )
-        }
     }
 }
 
 @Composable
-fun EditRecordDialog(record: ActivityRecord, onDismiss: () -> Unit, onSave: (Double) -> Unit) {
-    var input by remember { mutableStateOf(record.value.toInt().toString()) }
-    val displayDate = remember(record.date) {
-        try {
-            LocalDate.parse(record.date).format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
-        } catch (_: Exception) {
-            record.date // Fallback to original date if parsing fails
-        }
-    }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(text = "Değeri Düzenle ($displayDate)") },
-        text = {
-            OutlinedTextField(
-                value = input,
-                onValueChange = { input = it },
-                label = { Text(text = "Şınav Sayısı") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.fillMaxWidth()
-            )
-        },
-        confirmButton = {
-            Button(onClick = {
-                val newValue = input.toDoubleOrNull() ?: 0.0
-                onSave(newValue)
-            }) {
-                Text(stringResource(R.string.save))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.cancel))
-            }
-        }
-    )
-}
-
-
-@Composable
-fun OverallStatsCard(stats: OverallStats) {
-    Card(modifier = Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(4.dp)) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(text = "Genel İstatistikler", style = MaterialTheme.typography.titleLarge)
-
-            // Main Stats
+fun OverallStatsCard(stats: OverallStats, weeklyChange: ChangeStats, monthlyChange: ChangeStats) {
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = ComposeColor(0xFF2C2C2E))
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("Genel İstatistikler", style = MaterialTheme.typography.headlineSmall, color = ComposeColor.White)
+            Spacer(modifier = Modifier.height(16.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
                 StatItem(value = stats.totalPushups.toString(), label = "Toplam Şınav")
                 StatItem(value = stats.totalWater.toString(), label = "Toplam Su (ml)")
                 StatItem(value = stats.currentStreak.toString(), label = "Seri (Gün)")
             }
-
-            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-
-            // Comparisons
-            ComparisonRow(label = "Haftalık Değişim", current = stats.thisWeekTotalPushups, previous = stats.lastWeekTotalPushups)
-            ComparisonRow(label = "Aylık Değişim", current = stats.thisMonthTotalPushups, previous = stats.lastMonthTotalPushups)
+            Spacer(modifier = Modifier.height(16.dp))
+            ChangeStatsRow(label = "Haftalık Değişim", stats = weeklyChange)
+            Spacer(modifier = Modifier.height(8.dp))
+            ChangeStatsRow(label = "Aylık Değişim", stats = monthlyChange)
         }
+    }
+}
+
+@Composable
+fun HealthConnectCard(
+    hasPermissions: Boolean,
+    sessions: List<ExerciseSessionRecord>,
+    onConnectClick: () -> Unit,
+    onRefreshClick: () -> Unit
+) {
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = ComposeColor(0xFF2C2C2E))
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Health Connect Verileri", style = MaterialTheme.typography.headlineSmall, color = ComposeColor.White)
+                if (hasPermissions) {
+                    IconButton(onClick = onRefreshClick) {
+                        Icon(Icons.Default.Sync, contentDescription = "Yenile", tint = ComposeColor(0xFF00F5D4))
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+
+            if (!hasPermissions) {
+                Text("Xiaomi Band veya diğer cihazlardaki antrenmanlarını görmek için Health Connect'e bağlan.", color = ComposeColor.Gray, fontSize = 14.sp)
+                Spacer(modifier = Modifier.height(16.dp))
+                Button(
+                    onClick = onConnectClick,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = ComposeColor(0xFF00F5D4), contentColor = ComposeColor.Black)
+                ) {
+                    Text("İzin Ver ve Bağlan")
+                }
+            } else {
+                if (sessions.isEmpty()) {
+                    Text("Son 24 saat içinde kaydedilmiş antrenman bulunamadı.", color = ComposeColor.Gray, fontSize = 14.sp)
+                } else {
+                    sessions.forEach { session ->
+                        HealthSessionItem(session)
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = ComposeColor.DarkGray)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun HealthSessionItem(session: ExerciseSessionRecord) {
+    val startTime = session.startTime.atZone(ZoneId.systemDefault())
+    val duration = Duration.between(session.startTime, session.endTime)
+    val minutes = duration.toMinutes()
+    
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column {
+            Text(
+                text = getExerciseName(session.exerciseType),
+                color = ComposeColor.White,
+                fontWeight = FontWeight.Bold,
+                fontSize = 16.sp
+            )
+            Text(
+                text = startTime.format(DateTimeFormatter.ofPattern("dd MMM, HH:mm")),
+                color = ComposeColor.Gray,
+                fontSize = 12.sp
+            )
+        }
+        Text(
+            text = "$minutes dk",
+            color = ComposeColor(0xFF00F5D4),
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+fun getExerciseName(type: Int): String {
+    return when (type) {
+        ExerciseSessionRecord.EXERCISE_TYPE_RUNNING -> "Koşu"
+        ExerciseSessionRecord.EXERCISE_TYPE_WALKING -> "Yürüyüş"
+        8 -> "Bisiklet" 
+        74 -> "Yüzme"
+        ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING -> "Ağırlık Antrenmanı"
+        else -> "Diğer Egzersiz"
     }
 }
 
 @Composable
 fun StatItem(value: String, label: String) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(vertical = 4.dp)) {
-        Text(text = value, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Text(text = label, style = MaterialTheme.typography.bodyMedium)
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(text = value, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = ComposeColor.White)
+        Text(text = label, fontSize = 12.sp, color = ComposeColor.Gray)
     }
 }
 
 @Composable
-fun ComparisonRow(label: String, current: Int, previous: Int) {
-    val difference = current - previous
-    val diffText = when {
-        difference > 0 -> "+${abs(difference)}"
-        difference < 0 -> "-${abs(difference)}"
-        else -> "-"
-    }
-    val diffColor = when {
-        difference > 0 -> MaterialTheme.colorScheme.tertiary
-        difference < 0 -> MaterialTheme.colorScheme.error
-        else -> MaterialTheme.colorScheme.onSurface
-    }
-
-    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(text = label, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("Önceki", style = MaterialTheme.typography.bodySmall)
-                Text(previous.toString(), style = MaterialTheme.typography.titleMedium)
-            }
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("Şimdiki", style = MaterialTheme.typography.bodySmall)
-                Text(current.toString(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            }
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("Değişim", style = MaterialTheme.typography.bodySmall)
-                Text(diffText, style = MaterialTheme.typography.titleMedium, color = diffColor, fontWeight = FontWeight.Bold)
-            }
+fun ChangeStatsRow(label: String, stats: ChangeStats) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(text = label, modifier = Modifier.weight(1f), color = ComposeColor.White, fontSize = 16.sp)
+        Row(modifier = Modifier.weight(2f), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("Önceki\n${stats.previous}", color = ComposeColor.Gray, fontSize = 14.sp, textAlign = TextAlign.Center)
+            Text("Şimdiki\n${stats.current}", color = ComposeColor.Gray, fontSize = 14.sp, textAlign = TextAlign.Center)
+            val changeText = if (stats.change >= 0) "+${stats.change}" else "${stats.change}"
+            val changeColor = if (stats.change >= 0) ComposeColor(0xFFE53935) else ComposeColor.Green
+            Text("Değişim\n$changeText", color = changeColor, fontSize = 14.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
         }
     }
 }
 
 @Composable
-fun PushupChartCard(
-    records: List<ActivityRecord>,
-    timeSpan: ChartTimeSpan,
-    chartType: ChartType,
-    onTimeSpanSelected: (ChartTimeSpan) -> Unit,
-    onChartTypeSelected: (ChartType) -> Unit,
-    onEntrySelected: (ActivityRecord) -> Unit
-) {
-    Card(modifier = Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(4.dp)) {
+fun PushupChartCard(chartUiState: ChartUiState, chartTimeSpan: ChartTimeSpan, chartType: ChartType, viewModel: StatsViewModel) {
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = ComposeColor(0xFF2C2C2E))
+    ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(text = "Şınav Grafiği", style = MaterialTheme.typography.titleLarge)
-            Spacer(Modifier.height(16.dp))
-
-            // Time Span Selector
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                ToggleButton(text = "Haftalık", selected = timeSpan == ChartTimeSpan.WEEK) { onTimeSpanSelected(ChartTimeSpan.WEEK) }
-                Spacer(modifier = Modifier.padding(4.dp))
-                ToggleButton(text = "Yıllık", selected = timeSpan == ChartTimeSpan.YEAR) { onTimeSpanSelected(ChartTimeSpan.YEAR) }
-            }
-            Spacer(Modifier.height(8.dp))
-
-            // Chart Type Selector
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                ToggleButton(text = "Çizgi", selected = chartType == ChartType.LINE) { onChartTypeSelected(ChartType.LINE) }
-                Spacer(modifier = Modifier.padding(4.dp))
-                ToggleButton(text = "Bar", selected = chartType == ChartType.BAR) { onChartTypeSelected(ChartType.BAR) }
-            }
-
-            key(timeSpan, chartType, records) { // Recreate the chart when data changes
-                if (records.isEmpty() || records.all { it.value == 0.0 }) {
-                    Box(modifier = Modifier.height(250.dp).padding(top = 16.dp), contentAlignment = Alignment.Center) {
-                        Text(text = stringResource(id = R.string.no_stats_to_display_in_chart))
-                    }
-                } else {
-                    Box(modifier = Modifier.height(250.dp).padding(top = 16.dp)) {
-                        if (chartType == ChartType.LINE) {
-                            LineChart(records = records, timeSpan = timeSpan, onEntrySelected = onEntrySelected)
-                        } else {
-                            BarChart(records = records, timeSpan = timeSpan, onEntrySelected = onEntrySelected)
-                        }
-                    }
-                }
-            }
+            Text("Şınav Grafiği", style = MaterialTheme.typography.headlineSmall, color = ComposeColor.White)
+            Spacer(modifier = Modifier.height(16.dp))
+            ChartControls(chartTimeSpan = chartTimeSpan, chartType = chartType, onTimeSpanSelected = { viewModel.setChartTimeSpan(it) }, onTypeSelected = { viewModel.setChartType(it) })
+            Spacer(modifier = Modifier.height(16.dp))
+            StatsChart(chartUiState = chartUiState, timeSpan = chartTimeSpan, modifier = Modifier
+                .fillMaxWidth()
+                .height(250.dp))
         }
     }
 }
 
 @Composable
-fun ToggleButton(text: String, selected: Boolean, onClick: () -> Unit) {
+fun ChartControls(chartTimeSpan: ChartTimeSpan, chartType: ChartType, onTimeSpanSelected: (ChartTimeSpan) -> Unit, onTypeSelected: (ChartType) -> Unit) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+        SegmentedButton(text = "Haftalık", isSelected = chartTimeSpan == ChartTimeSpan.WEEK, onClick = { onTimeSpanSelected(ChartTimeSpan.WEEK) })
+        SegmentedButton(text = "Yıllık", isSelected = chartTimeSpan == ChartTimeSpan.YEAR, onClick = { onTimeSpanSelected(ChartTimeSpan.YEAR) })
+        Spacer(modifier = Modifier.width(16.dp))
+        SegmentedButton(text = "Bar", isSelected = chartType == ChartType.BAR, onClick = { onTypeSelected(ChartType.BAR) })
+    }
+}
+
+@Composable
+fun SegmentedButton(text: String, isSelected: Boolean, onClick: () -> Unit, enabled: Boolean = true) {
+    val selectedColor = ComposeColor(0xFF00F5D4)
+    val unselectedColor = ComposeColor.DarkGray
     Button(
         onClick = onClick,
-        colors = ButtonDefaults.buttonColors(
-            containerColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
-            contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
-        )
+        enabled = enabled,
+        shape = RoundedCornerShape(12.dp),
+        colors = ButtonDefaults.buttonColors(containerColor = if (isSelected) selectedColor else unselectedColor, contentColor = if (isSelected) ComposeColor.Black else ComposeColor.White)
     ) {
         Text(text)
     }
 }
 
-class IndexToDateValueFormatter(private val records: List<ActivityRecord>, private val timeSpan: ChartTimeSpan) : ValueFormatter() {
-    private val weekFormatter = DateTimeFormatter.ofPattern("d MMM", Locale.forLanguageTag("tr"))
-    private val yearFormatter = DateTimeFormatter.ofPattern("MMM", Locale.forLanguageTag("tr"))
-
-    override fun getFormattedValue(value: Float): String {
-        val index = value.toInt()
-        return if (index >= 0 && index < records.size) {
-            val date = LocalDate.parse(records[index].date)
-            if (timeSpan == ChartTimeSpan.WEEK) date.format(weekFormatter) else date.month.getDisplayName(TextStyle.FULL, Locale.forLanguageTag("tr"))
-        } else {
-            ""
-        }
-    }
-}
-
-val yAxisValueFormatter = object : ValueFormatter() {
-    override fun getFormattedValue(value: Float): String {
-        return value.roundToInt().toString()
-    }
-}
-
 
 @Composable
-fun LineChart(records: List<ActivityRecord>, timeSpan: ChartTimeSpan, onEntrySelected: (ActivityRecord) -> Unit) {
-    val chartColor = MaterialTheme.colorScheme.primary.toArgb()
+fun StatsChart(chartUiState: ChartUiState, timeSpan: ChartTimeSpan, modifier: Modifier = Modifier) {
+    val onSurfaceColor = MaterialTheme.colorScheme.onSurface.toArgb()
+    val chartColor = ComposeColor(0xFF00F5D4).toArgb()
 
     AndroidView(
-        factory = { context ->
-            LineChart(context).apply {
-                description.isEnabled = false
-                setDrawGridBackground(false)
-                legend.isEnabled = false
-
-                xAxis.apply {
-                    position = XAxis.XAxisPosition.BOTTOM
-                    setDrawGridLines(false)
-                    textColor = chartColor
-                    axisLineColor = chartColor
-                    granularity = 1f
-                }
-                axisLeft.apply {
-                    textColor = chartColor
-                    axisLineColor = chartColor
-                    setDrawGridLines(true)
-                    granularity = 5f
-                    valueFormatter = yAxisValueFormatter
-                    axisMinimum = 0f
-                }
-                axisRight.isEnabled = false
-            }
-        },
-        update = { chart ->
-            val entries = records.mapIndexed { index, record -> 
-                Entry(index.toFloat(), record.value.toFloat())
-            }
-            val dataSet = LineDataSet(entries, "Push-ups").apply {
-                color = chartColor
-                valueTextColor = Color.TRANSPARENT
-                setCircleColor(chartColor)
-                circleHoleColor = chartColor
-                lineWidth = 2f
-            }
-            
-            chart.xAxis.valueFormatter = IndexToDateValueFormatter(records, timeSpan)
-            chart.xAxis.axisMinimum = -0.5f
-            chart.xAxis.axisMaximum = records.size - 0.5f
-            chart.data = LineData(dataSet)
-
-            chart.setOnChartValueSelectedListener(object : OnChartValueSelectedListener {
-                override fun onValueSelected(e: Entry?, h: Highlight?) {
-                    e?.let {
-                        val index = it.x.toInt()
-                        if (index >= 0 && index < records.size) {
-                            onEntrySelected(records[index])
-                        }
-                    }
-                }
-                override fun onNothingSelected() {}
-            })
-
-            chart.invalidate()
-        },
-        modifier = Modifier.fillMaxSize()
-    )
-}
-
-@Composable
-fun BarChart(records: List<ActivityRecord>, timeSpan: ChartTimeSpan, onEntrySelected: (ActivityRecord) -> Unit) {
-    val chartColor = MaterialTheme.colorScheme.primary.toArgb()
-
-    AndroidView(
+        modifier = modifier,
         factory = { context ->
             BarChart(context).apply {
                 description.isEnabled = false
-                setDrawGridBackground(false)
-                legend.isEnabled = false
-
-                xAxis.apply {
-                    position = XAxis.XAxisPosition.BOTTOM
-                    setDrawGridLines(false)
-                    textColor = chartColor
-                    axisLineColor = chartColor
-                    granularity = 1f
-                }
-                axisLeft.apply {
-                    textColor = chartColor
-                    axisLineColor = chartColor
-                    setDrawGridLines(true)
-                    granularity = 5f
-                    valueFormatter = yAxisValueFormatter
-                    axisMinimum = 0f
-                }
+                xAxis.position = XAxis.XAxisPosition.BOTTOM
+                xAxis.setDrawGridLines(false)
+                xAxis.textColor = Color.WHITE
+                xAxis.granularity = 1f
+                axisLeft.setDrawGridLines(true)
+                axisLeft.textColor = Color.WHITE
+                axisLeft.axisMinimum = 0f
                 axisRight.isEnabled = false
+                legend.isEnabled = false
+                setTouchEnabled(true)
+                setScaleEnabled(true)
+                isDragEnabled = true
             }
         },
         update = { chart ->
-            val entries = records.mapIndexed { index, record -> 
-                BarEntry(index.toFloat(), record.value.toFloat())
-            }
-            val dataSet = BarDataSet(entries, "Push-ups").apply {
-                color = chartColor
-                valueTextColor = Color.TRANSPARENT
-            }
-
-            chart.xAxis.valueFormatter = IndexToDateValueFormatter(records, timeSpan)
-            val data = BarData(dataSet)
-            data.barWidth = 0.5f
-            chart.data = data
-
-            chart.xAxis.axisMinimum = -0.5f
-            chart.xAxis.axisMaximum = (records.size - 1) + 0.5f
-
-            chart.setOnChartValueSelectedListener(object : OnChartValueSelectedListener {
-                override fun onValueSelected(e: Entry?, h: Highlight?) {
-                    e?.let {
-                        val index = it.x.toInt()
-                        if (index >= 0 && index < records.size) {
-                            onEntrySelected(records[index])
-                        }
+            val entries = when (timeSpan) {
+                ChartTimeSpan.WEEK -> {
+                    val startDate = LocalDate.now().minusDays(6)
+                    (0..6).map {
+                        val date = startDate.plusDays(it.toLong())
+                        val record = chartUiState.records.find { r -> LocalDate.parse(r.date) == date }
+                        BarEntry(it.toFloat(), record?.value?.toFloat() ?: 0f)
                     }
                 }
-                override fun onNothingSelected() {}
-            })
+                ChartTimeSpan.YEAR -> {
+                    val startDate = LocalDate.now().minusMonths(11).withDayOfMonth(1)
+                    (0..11).map {
+                        val month = startDate.plusMonths(it.toLong())
+                        val monthValue = chartUiState.records.filter { r ->
+                            val recordDate = LocalDate.parse(r.date)
+                            recordDate.year == month.year && recordDate.month == month.month
+                        }.sumOf { it.value }.toFloat()
+                        BarEntry(it.toFloat(), monthValue)
+                    }
+                }
+            }
 
+            val dataSet = BarDataSet(entries, "").apply {
+                color = chartColor
+                valueTextColor = onSurfaceColor
+                setDrawValues(false)
+            }
+
+            chart.data = BarData(dataSet).apply { barWidth = 0.5f }
+
+            chart.xAxis.valueFormatter = object : ValueFormatter() {
+                override fun getFormattedValue(value: Float): String {
+                    return try {
+                        when (timeSpan) {
+                            ChartTimeSpan.WEEK -> {
+                                val date = LocalDate.now().minusDays(6).plusDays(value.toLong())
+                                date.format(DateTimeFormatter.ofPattern("dd MMM"))
+                            }
+                            ChartTimeSpan.YEAR -> {
+                                val month = LocalDate.now().minusMonths(11).withDayOfMonth(1).plusMonths(value.toLong())
+                                month.format(DateTimeFormatter.ofPattern("MMM"))
+                            }
+                        }
+                    } catch (e: Exception) {
+                        ""
+                    }
+                }
+            }
+
+            chart.setVisibleXRangeMaximum(if (timeSpan == ChartTimeSpan.WEEK) 7f else 12f)
+            chart.moveViewToX(entries.size.toFloat())
             chart.invalidate()
-        },
-        modifier = Modifier.fillMaxSize()
+        }
     )
 }
-
-fun String.toLocalDate(): LocalDate = LocalDate.parse(this)

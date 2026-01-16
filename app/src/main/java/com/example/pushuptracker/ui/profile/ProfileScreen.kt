@@ -18,10 +18,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -54,14 +51,9 @@ import kotlinx.coroutines.delay
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(viewModel: ProfileViewModel = hiltViewModel()) {
-    val age by viewModel.age.collectAsStateWithLifecycle(30)
     val weight by viewModel.weight.collectAsStateWithLifecycle(70)
-    val gender by viewModel.gender.collectAsStateWithLifecycle("Erkek")
-    val goal by viewModel.goal.collectAsStateWithLifecycle("Direnç Kazanma")
-    val workoutFrequency by viewModel.workoutFrequency.collectAsStateWithLifecycle("Orta Seviye")
     val dailyGoal by viewModel.dailyGoal.collectAsStateWithLifecycle(50)
     val dailyWaterGoal by viewModel.dailyWaterGoal.collectAsStateWithLifecycle(2000)
     val workoutReminderEnabled by viewModel.workoutReminderEnabled.collectAsStateWithLifecycle(false)
@@ -71,11 +63,7 @@ fun ProfileScreen(viewModel: ProfileViewModel = hiltViewModel()) {
     val waterReminderEnabled by viewModel.waterReminderEnabled.collectAsStateWithLifecycle(false)
     val waterReminderFrequency by viewModel.waterReminderFrequency.collectAsStateWithLifecycle(120)
 
-    var ageInput by remember(age) { mutableStateOf(age.toString()) }
     var weightInput by remember(weight) { mutableStateOf(weight.toString()) }
-    var selectedGender by remember(gender) { mutableStateOf(gender) }
-    var selectedGoal by remember(goal) { mutableStateOf(goal) }
-    var selectedFrequency by remember(workoutFrequency) { mutableStateOf(workoutFrequency) }
     var showResetDialog by remember { mutableStateOf(false) }
     var showCheckAnimation by remember { mutableStateOf(false) }
     var showWaterReminderDialog by remember { mutableStateOf(false) }
@@ -127,27 +115,34 @@ fun ProfileScreen(viewModel: ProfileViewModel = hiltViewModel()) {
                     SectionTitle(title = "Kullanıcı Profili")
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)){
-                        OutlinedTextField(value = ageInput, onValueChange = {ageInput = it}, label = { Text("Yaş") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1f), colors = transparentTextFieldColors())
-                        OutlinedTextField(value = weightInput, onValueChange = {weightInput = it}, label = { Text("Kilo (kg)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1f), colors = transparentTextFieldColors())
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedTextField(
+                            value = weightInput,
+                            onValueChange = { weightInput = it },
+                            label = { Text("Vücut Ağırlığı (kg)") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(1f),
+                            colors = transparentTextFieldColors()
+                        )
+                        Button(
+                            onClick = {
+                                weightInput.toIntOrNull()?.let { viewModel.saveWeight(it) }
+                                showCheckAnimation = true
+                            },
+                            modifier = Modifier.padding(start = 8.dp)
+                        ) {
+                            Text("Güncelle")
+                        }
                     }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    ProfileDropdown(label = "Cinsiyet", selectedOption = selectedGender, options = listOf("Erkek", "Kadın", "Diğer")) { selectedGender = it }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    ProfileDropdown(label = "Hedef", selectedOption = selectedGoal, options = listOf("Kilo Verme", "Direnç Kazanma", "Kas Kütlesi Artırma")) { selectedGoal = it }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    ProfileDropdown(label = "Antrenman Sıklığı", selectedOption = selectedFrequency, options = listOf("Yeni Başlayan", "Orta Seviye", "Düzenli")) { selectedFrequency = it }
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Button(onClick = {
-                        ageInput.toIntOrNull()?.let { viewModel.saveAge(it) }
-                        weightInput.toIntOrNull()?.let { viewModel.saveWeight(it) }
-                        viewModel.saveGender(selectedGender)
-                        viewModel.saveGoal(selectedGoal)
-                        viewModel.saveWorkoutFrequency(selectedFrequency)
-                        showCheckAnimation = true
-                    }, modifier = Modifier.fillMaxWidth()) {
-                        Text("Profili Güncelle")
-                    }
+                    Text(
+                        text = "Kilonuz antrenman sırasında yakılan kaloriyi hesaplamak için kullanılır.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
                 }
 
                 // --- Daily Goals Section ---
@@ -216,28 +211,6 @@ fun SectionTitle(title: String) {
     Text(text = title, style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun ProfileDropdown(label: String, selectedOption: String, options: List<String>, onOptionSelected: (String) -> Unit) {
-    var expanded by remember { mutableStateOf(false) }
-    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
-        OutlinedTextField(
-            modifier = Modifier.fillMaxWidth().menuAnchor(),
-            value = selectedOption,
-            onValueChange = {},
-            label = { Text(label) },
-            readOnly = true,
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            colors = transparentTextFieldColors()
-        )
-        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            options.forEach { option ->
-                DropdownMenuItem(text = { Text(option) }, onClick = { onOptionSelected(option); expanded = false })
-            }
-        }
-    }
-}
-
 @Composable
 fun GoalInput(label: String, currentGoal: Int, onSave: (Int) -> Unit) {
     var value by remember { mutableStateOf("") }
@@ -294,7 +267,6 @@ fun showTimePicker(context: android.content.Context, currentTime: String, onTime
     ).show()
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WaterReminderDialog(
     currentFrequency: Int,

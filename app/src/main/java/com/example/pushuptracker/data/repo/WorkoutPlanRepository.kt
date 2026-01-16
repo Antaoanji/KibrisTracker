@@ -1,36 +1,25 @@
 package com.example.pushuptracker.data.repo
 
-import com.example.pushuptracker.ai.AiResult
-import com.example.pushuptracker.ai.GenerativeAiService
-import java.util.concurrent.ConcurrentHashMap
+import com.example.pushuptracker.data.WorkoutData
+import com.example.pushuptracker.model.Workout
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class WorkoutPlanRepository @Inject constructor(
-    private val generativeAiService: GenerativeAiService
-) {
+class WorkoutPlanRepository @Inject constructor() {
 
-    // ✅ Cache successful results
-    private val workoutCache = ConcurrentHashMap<String, String>()
+    /**
+     * Returns the pre-defined PPLUL program.
+     */
+    fun getPplulProgram(): List<Workout> {
+        return WorkoutData.pplulProgram
+    }
 
-    suspend fun getWorkoutPlan(prompt: String): AiResult {
-        // The prompt itself is a good cache key, but we hash it for a fixed length
-        val cacheKey = prompt.hashCode().toString()
-
-        // 🔹 Cache hit
-        workoutCache[cacheKey]?.let { cachedText ->
-            return AiResult.Success(cachedText)
-        }
-
-        // 🔹 Cache miss → API call
-        val result = generativeAiService.generateWorkout(prompt)
-
-        // 🔹 Cache only successful results
-        if (result is AiResult.Success) {
-            workoutCache[cacheKey] = result.text
-        }
-
-        return result
+    /**
+     * Returns a specific day's workout from the PPLUL program.
+     * index 0: Push, 1: Pull, 2: Legs, 3: Upper, 4: Lower
+     */
+    fun getWorkoutForDay(index: Int): Workout? {
+        return WorkoutData.pplulProgram.getOrNull(index)
     }
 }

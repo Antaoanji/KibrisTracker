@@ -24,7 +24,9 @@ class AchievementsViewModel @Inject constructor(
 
     val uiState = combine(
         settingsManager.unlockedBadgesFlow,
-        pushupRepo.getAllRecords(),
+        // CRITICAL FIX: Changed getAllRecords() to getAllPushupRecords()
+        // This ensures we only calculate badges based on pushup data.
+        pushupRepo.getAllPushupRecords(), 
         settingsManager.currentStreakFlow
     ) { unlockedBadges, allPushups, currentStreak ->
 

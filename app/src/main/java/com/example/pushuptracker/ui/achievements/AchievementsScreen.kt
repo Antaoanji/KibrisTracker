@@ -104,7 +104,7 @@ fun BadgeItem(badge: Badge, isUnlocked: Boolean, modifier: Modifier = Modifier) 
             if (!isUnlocked) {
                 Spacer(modifier = Modifier.height(8.dp))
                 LinearProgressIndicator(
-                    progress = badge.progress,
+                    progress = { badge.progress },
                     modifier = Modifier.fillMaxWidth(0.8f).height(6.dp).clip(RoundedCornerShape(3.dp))
                 )
             }

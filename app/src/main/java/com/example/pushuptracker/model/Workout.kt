@@ -12,6 +12,7 @@ data class Workout(
 @Parcelize
 data class Exercise(
     val name: String,
+    val searchKey: String = "",
     val sets: Int,
     val reps: String, // e.g., "10-12" or "Maksimum"
     val restTimeSeconds: Int,

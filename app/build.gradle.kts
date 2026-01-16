@@ -70,6 +70,10 @@ android {
     }
 }
 
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 dependencies {
 
     // Core & UI
@@ -112,6 +116,7 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.datetime)
+    implementation("com.google.code.gson:gson:2.10.1")
 
     // DataStore
     implementation(libs.androidx.datastore.preferences)
@@ -124,6 +129,9 @@ dependencies {
 
     // Lottie
     implementation(libs.lottie.compose)
+
+    // Health Connect - Updated to stable 1.1.0
+    implementation("androidx.health.connect:connect-client:1.1.0")
 
     // Testing
     testImplementation(libs.junit)
@@ -138,4 +146,5 @@ dependencies {
 
     // Debug
     debugImplementation(libs.androidx.ui.tooling)
+    implementation("com.google.ai.client.generativeai:generativeai:0.9.0")
 }
