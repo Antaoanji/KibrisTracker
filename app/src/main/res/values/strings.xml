@@ -10,7 +10,6 @@
     <string name="profile">Profil</string>
 
     <!-- Home Screen -->
-    <string name="current_streak">Harika gidiyorsun! %1$d Günlük Seri</string>
     <string name="add">Ekle</string>
     <string name="today">Bugün</string>
     <string name="yesterday">Dün</string>
@@ -21,23 +20,10 @@
     <string name="today_progress">Bugünkü İlerleme</string>
 
     <!-- Dynamic Home Titles -->
-    <string name="streak_active">Harika gidiyorsun! %1$d günlük seri</string>
-    <string name="goal_reached_congrats">Hedefe ulaşıldı, tebrikler!</string>
-    <string name="great_start">Harika başlangıç, devam et!</string>
-    <string name="welcome_back">Tekrar hoş geldin!</string>
 
     <!-- Profile & Settings -->
-    <string name="daily_pushup_goal">Günlük Şınav Hedefi</string>
-    <string name="push_up_count">Şınav Sayısı</string>
-    <string name="current_goal">Mevcut Hedef: %1$d</string>
-    <string name="daily_water_goal">Günlük Su Hedefi</string>
-    <string name="water_drunk_ml">İçilen Su (ml)</string>
-    <string name="reminders_title">Hatırlatıcılar</string>
-    <string name="pushup_reminder">Şınav Hatırlatıcısı</string>
-    <string name="water_reminder">Su Hatırlatıcısı</string>
 
     <!-- Stats Screen -->
-    <string name="no_stats_to_display_in_chart">Grafikte gösterilecek veri bulunamadı.</string>
 
     <!-- Badge Titles and Descriptions -->
     <string name="badge_streak_3_title">Ateşleyici</string>

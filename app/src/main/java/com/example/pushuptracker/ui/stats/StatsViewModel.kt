@@ -33,6 +33,7 @@ data class ChartUiState(
 data class OverallStats(
     val totalPushups: Int = 0,
     val totalWater: Int = 0,
+    val totalCalories: Int = 0, // Added for UI
     val currentStreak: Int = 0
 )
 
@@ -64,6 +65,9 @@ class StatsViewModel @Inject constructor(
     private val _hasHealthPermissions = MutableStateFlow(false)
     val hasHealthPermissions = _hasHealthPermissions.asStateFlow()
 
+    private val _healthCalories = MutableStateFlow(0)
+    val healthCalories = _healthCalories.asStateFlow()
+
     val exerciseList = pushupRepo.getDistinctExerciseTypes()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), listOf("pushup"))
 
@@ -75,14 +79,15 @@ class StatsViewModel @Inject constructor(
         viewModelScope.launch {
             _hasHealthPermissions.value = healthConnectManager.hasAllPermissions()
             if (_hasHealthPermissions.value) {
-                loadHealthSessions()
+                loadHealthData()
             }
         }
     }
 
-    fun loadHealthSessions() {
+    fun loadHealthData() {
         viewModelScope.launch {
             _healthSessions.value = healthConnectManager.readExerciseSessions()
+            _healthCalories.value = healthConnectManager.readTotalCalories().toInt()
         }
     }
 
@@ -100,9 +105,16 @@ class StatsViewModel @Inject constructor(
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ChartUiState())
 
-    val overallStats = pushupRepo.getAllRecords().map { records ->
+    val overallStats = combine(
+        pushupRepo.getAllRecords(),
+        _healthCalories
+    ) { records, hCalories ->
         val totalPushups = records.filter { it.type == "pushup" }.sumOf { it.value }.toInt()
         val totalWater = records.filter { it.type == "water" }.sumOf { it.value }.toInt()
+        
+        // Pushup calories calculation + Health Connect calories
+        val pushupCalories = totalPushups * 0.5 
+        
         val pushupDates = records.filter { it.type == "pushup" && it.value > 0 }
             .map { LocalDate.parse(it.date) }.distinct().sortedDescending()
 
@@ -127,7 +139,12 @@ class StatsViewModel @Inject constructor(
                 }
             }
         }
-        OverallStats(totalPushups = totalPushups, totalWater = totalWater, currentStreak = currentStreak)
+        OverallStats(
+            totalPushups = totalPushups, 
+            totalWater = totalWater, 
+            totalCalories = hCalories + pushupCalories.toInt(),
+            currentStreak = currentStreak
+        )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), OverallStats())
 
 

@@ -1,6 +1,6 @@
 pluginManagement {
     plugins {
-        id("com.google.devtools.ksp") version "2.3.0-1.0.28"
+        id("com.google.devtools.ksp") version "2.3.3"
     }
     repositories {
         google()            

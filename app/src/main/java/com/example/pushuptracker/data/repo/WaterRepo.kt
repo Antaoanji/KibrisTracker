@@ -25,23 +25,22 @@ class WaterRepo @Inject constructor(private val waterDao: WaterDao) {
 
     suspend fun addWater(amount: Double): ActivityRecord {
         val currentRecord = getRecordForDate(todayDateString).first()
-        val newValue = (currentRecord?.value ?: 0.0) + amount
-        val newRecord = ActivityRecord(
-            type = "water",
-            value = newValue,
-            date = todayDateString
-        )
+        
+        val newRecord = if (currentRecord != null) {
+            currentRecord.copy(
+                value = currentRecord.value + amount,
+                timestamp = System.currentTimeMillis()
+            )
+        } else {
+            ActivityRecord(
+                type = "water",
+                value = amount,
+                date = todayDateString
+            )
+        }
+        
         waterDao.upsert(newRecord)
         return newRecord
-    }
-
-    suspend fun addWaterIntake(amount: Int) {
-        val todayRecord = ActivityRecord(
-            type = "water",
-            value = amount.toDouble(),
-            date = todayDateString
-        )
-        waterDao.upsert(todayRecord)
     }
 
     suspend fun clear() {

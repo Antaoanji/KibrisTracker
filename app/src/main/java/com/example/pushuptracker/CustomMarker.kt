@@ -3,6 +3,7 @@ package com.example.pushuptracker
 import android.annotation.SuppressLint
 import android.content.Context
 import android.widget.TextView
+import com.example.pushuptracker.R
 import com.github.mikephil.charting.components.MarkerView
 import com.github.mikephil.charting.data.Entry
 import com.github.mikephil.charting.highlight.Highlight

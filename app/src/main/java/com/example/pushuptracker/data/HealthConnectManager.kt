@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.permission.HealthPermission
+import androidx.health.connect.client.records.ActiveCaloriesBurnedRecord
 import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
@@ -19,7 +20,8 @@ class HealthConnectManager @Inject constructor(
     private val healthConnectClient by lazy { HealthConnectClient.getOrCreate(context) }
 
     val permissions = setOf(
-        HealthPermission.getReadPermission(ExerciseSessionRecord::class)
+        HealthPermission.getReadPermission(ExerciseSessionRecord::class),
+        HealthPermission.getReadPermission(ActiveCaloriesBurnedRecord::class)
     )
 
     suspend fun hasAllPermissions(): Boolean {
@@ -42,6 +44,24 @@ class HealthConnectManager @Inject constructor(
         } catch (e: Exception) {
             Log.e("HealthConnect", "Error reading sessions", e)
             emptyList()
+        }
+    }
+
+    suspend fun readTotalCalories(
+        start: Instant = Instant.now().minusSeconds(24 * 60 * 60),
+        end: Instant = Instant.now()
+    ): Double {
+        return try {
+            val response = healthConnectClient.readRecords(
+                ReadRecordsRequest(
+                    recordType = ActiveCaloriesBurnedRecord::class,
+                    timeRangeFilter = TimeRangeFilter.between(start, end)
+                )
+            )
+            response.records.sumOf { it.energy.inKilocalories }
+        } catch (e: Exception) {
+            Log.e("HealthConnect", "Error reading calories", e)
+            0.0
         }
     }
 }

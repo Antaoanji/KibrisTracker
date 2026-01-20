@@ -9,17 +9,16 @@ import javax.inject.Singleton
 class WorkoutPlanRepository @Inject constructor() {
 
     /**
-     * Returns the pre-defined PPLUL program.
+     * Returns the pre-defined Machine + Weight program.
      */
-    fun getPplulProgram(): List<Workout> {
-        return WorkoutData.pplulProgram
+    fun getMachineWeightProgram(): List<Workout> {
+        return WorkoutData.machineWeightProgram
     }
 
     /**
-     * Returns a specific day's workout from the PPLUL program.
-     * index 0: Push, 1: Pull, 2: Legs, 3: Upper, 4: Lower
+     * Returns a specific day's workout from the Machine + Weight program.
      */
     fun getWorkoutForDay(index: Int): Workout? {
-        return WorkoutData.pplulProgram.getOrNull(index)
+        return WorkoutData.machineWeightProgram.getOrNull(index)
     }
 }

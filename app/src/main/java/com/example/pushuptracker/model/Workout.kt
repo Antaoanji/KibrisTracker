@@ -17,7 +17,7 @@ data class Exercise(
     val reps: String, // e.g., "10-12" or "Maksimum"
     val restTimeSeconds: Int,
     val description: String, // How to do it, tips etc.
-    val imageUrl: String, // URL for the static image
+    val imageUrl: String = "", // Varsayılan değer eklendi, artık zorunlu değil.
     val metValue: Double = 3.0 // Metabolic Equivalent of Task - Default to a moderate value
 ) : Parcelable
 

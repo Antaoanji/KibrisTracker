@@ -3,6 +3,7 @@ package com.example.pushuptracker.ui.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.pushuptracker.SettingsManager
+import com.example.pushuptracker.ai.PushupSensorManager
 import com.example.pushuptracker.data.repo.PushupRepo
 import com.example.pushuptracker.data.repo.WaterRepo
 import com.example.pushuptracker.model.ActivityRecord
@@ -27,7 +28,8 @@ import javax.inject.Inject
 class HomeViewModel @Inject constructor(
     private val pushupRepo: PushupRepo,
     private val waterRepo: WaterRepo,
-    private val settingsManager: SettingsManager
+    private val settingsManager: SettingsManager,
+    private val pushupSensorManager: PushupSensorManager
 ) : ViewModel() {
 
     private val today: String get() = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
@@ -39,11 +41,10 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    // CRITICAL FIX: The types in combine are now correctly inferred from the Repo/DAO
     private val pushupDataFlow = combine(
-        pushupRepo.getRecordForDate(today),      // Returns Flow<ActivityRecord?>
-        pushupRepo.getAllPushupRecords(),        // Returns Flow<List<ActivityRecord>>
-        settingsManager.dailyGoalFlow          // Returns Flow<Int>
+        pushupRepo.getRecordForDate(today),
+        pushupRepo.getAllPushupRecords(),
+        settingsManager.dailyGoalFlow
     ) { todayPushups, allPushups, dailyGoal ->
         Triple(todayPushups, allPushups, dailyGoal)
     }
@@ -56,7 +57,6 @@ class HomeViewModel @Inject constructor(
         Triple(todayWater, allWater, dailyGoal)
     }
 
-    
     val homeScreenState = combine(
         pushupDataFlow,
         waterDataFlow,
@@ -66,7 +66,6 @@ class HomeViewModel @Inject constructor(
         val (todayPushups, allPushups, dailyPushupGoal) = pushupData
         val (todayWater, allWater, dailyWaterGoal) = waterData
 
-        // This mapping now works because allPushups is correctly a List<ActivityRecord>
         val pushupStreak = calculateCurrentStreak(allPushups.map { it.date }.toSet())
         val waterStreak = calculateCurrentStreak(allWater.map { it.date }.toSet())
 
@@ -102,6 +101,14 @@ class HomeViewModel @Inject constructor(
         )
 
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), HomeScreenState())
+
+    fun startAutoPushupCounting(onCountUpdate: (Int) -> Unit) {
+        pushupSensorManager.startListening(onCountUpdate)
+    }
+
+    fun stopAutoPushupCounting() {
+        pushupSensorManager.stopListening()
+    }
 
     private suspend fun checkAndResetStreaks() {
         val lastWorkoutSummary = settingsManager.lastWorkoutSummaryFlow.first()

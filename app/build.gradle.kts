@@ -26,19 +26,23 @@ val localProperties = getProperties("local.properties")
 
 android {
     namespace = "com.example.pushuptracker"
-    compileSdk = 36
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.example.pushuptracker"
         minSdk = 26
-        targetSdk = 36
+        targetSdk = 35
         versionCode = 1
         versionName = "1.0"
 
         testInstrumentationRunner = "com.google.dagger.hilt.android.testing.HiltTestRunner"
 
         // Make the API key available in the BuildConfig
-        buildConfigField("String", "GEMINI_API_KEY", "\"${localProperties.getProperty("GEMINI_API_KEY")}\"")
+        buildConfigField(
+            "String",
+            "GEMINI_API_KEY",
+            "\"${localProperties.getProperty("GEMINI_API_KEY")}\""
+        )
     }
 
     buildTypes {
@@ -91,7 +95,7 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.coil.gif)
     implementation(libs.androidx.ui.text.google.fonts) // Added Google Fonts dependency
-    implementation("androidx.core:core-splashscreen:1.0.1") // Added splash screen dependency
+    implementation("androidx.core:core-splashscreen:1.2.0") // Added splash screen dependency
 
     // Navigation
     implementation(libs.androidx.navigation.compose)
@@ -116,7 +120,7 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.datetime)
-    implementation("com.google.code.gson:gson:2.10.1")
+    implementation("com.google.code.gson:gson:2.13.2")
 
     // DataStore
     implementation(libs.androidx.datastore.preferences)
@@ -131,7 +135,7 @@ dependencies {
     implementation(libs.lottie.compose)
 
     // Health Connect - Updated to stable 1.1.0
-    implementation("androidx.health.connect:connect-client:1.1.0")
+    implementation(libs.androidx.health.connect.client)
 
     // Testing
     testImplementation(libs.junit)

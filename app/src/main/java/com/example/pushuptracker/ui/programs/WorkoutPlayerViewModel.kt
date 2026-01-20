@@ -31,12 +31,12 @@ sealed class WorkoutState {
         val totalExercises: Int,
         val currentExerciseIndex: Int,
         val historyHint: String?,
-        val coachSuggestion: String? // Added for AI coach
+        val coachSuggestion: String?,
+        val remainingExerciseTime: Int? = null // New: for timed exercises
     ) : WorkoutState()
     data class Resting(val nextExercise: Exercise, val nextSet: Int, val remainingTime: Int, val initialDuration: Int) : WorkoutState()
     data class Finished(
         val totalTimeMinutes: Int, 
-        val caloriesBurned: Int,
         val totalVolume: Double,
         val dominantDifficulty: String
     ) : WorkoutState()
@@ -62,8 +62,8 @@ class WorkoutPlayerViewModel @Inject constructor(
     )
 
     private var timerJob: Job? = null
+    private var exerciseTimerJob: Job? = null
     private var startTimeMillis: Long = 0L
-    private var totalCaloriesBurned: Double = 0.0
     private var sessionVolume: Double = 0.0
     private val sessionDifficulties = mutableListOf<String>()
 
@@ -85,13 +85,25 @@ class WorkoutPlayerViewModel @Inject constructor(
         updateStateWithHistory(exercise, workoutHolder.currentSetIndex)
     }
 
+    private fun isWarmup(exercise: Exercise): Boolean {
+        val warmupKeywords = listOf(
+            "Isınma", "Çevirme", "Döndürme", "Jumping", "Kedi-Deve", 
+            "Scapular", "Duvarda", "Leg Swing", "Pull Apart", 
+            "Bodyweight Squat", "Melek", "Stretch", "Hang", "Statik"
+        )
+        return warmupKeywords.any { exercise.name.contains(it, ignoreCase = true) } || 
+               exercise.reps.contains("Saniye") || 
+               exercise.reps.contains("Dakika")
+    }
+
     fun onSetFinished(weightUsed: Double?, difficulty: String, note: String? = null) = viewModelScope.launch {
         timerJob?.cancel()
+        exerciseTimerJob?.cancel()
         val workout = workoutHolder.workout ?: return@launch
         val currentExercise = workout.exercises[workoutHolder.currentExerciseIndex]
         
         val repsString = currentExercise.reps
-        val reps = repsString.split('-').mapNotNull { it.trim().toIntOrNull() }.average().toInt()
+        val reps = if (repsString == "MAX" || repsString.contains("Dakika") || repsString.contains("Saniye")) 20 else repsString.split('-').mapNotNull { it.trim().toIntOrNull() }.average().toInt()
 
         val key = if (currentExercise.searchKey.isNotBlank()) currentExercise.searchKey else currentExercise.name
         val record = ActivityRecord(
@@ -108,17 +120,25 @@ class WorkoutPlayerViewModel @Inject constructor(
         sessionVolume += (weightUsed ?: 0.0) * reps
         sessionDifficulties.add(difficulty)
 
-        calculateCaloriesForSet(currentExercise, weightUsed)
+        val shouldSkipRest = isWarmup(currentExercise)
 
         if (workoutHolder.currentSetIndex < currentExercise.sets) {
             workoutHolder.currentSetIndex++
-            startRest(currentExercise.restTimeSeconds, currentExercise, workoutHolder.currentSetIndex)
+            if (shouldSkipRest) {
+                onRestFinished()
+            } else {
+                startRest(currentExercise.restTimeSeconds, currentExercise, workoutHolder.currentSetIndex)
+            }
         } else {
             workoutHolder.currentExerciseIndex++
             if (workoutHolder.currentExerciseIndex < workout.exercises.size) {
                 workoutHolder.currentSetIndex = 1
                 val nextExercise = workout.exercises[workoutHolder.currentExerciseIndex]
-                startRest(currentExercise.restTimeSeconds, nextExercise, 1)
+                if (shouldSkipRest) {
+                    onRestFinished()
+                } else {
+                    startRest(currentExercise.restTimeSeconds, nextExercise, 1)
+                }
             } else {
                 finishWorkout(false)
             }
@@ -126,7 +146,6 @@ class WorkoutPlayerViewModel @Inject constructor(
     }
 
     fun swapCurrentExercise() = viewModelScope.launch {
-        Log.d("GeminiSwap", "Fonksiyon tetiklendi")
         if (_isSwapping.value) return@launch
         val state = _workoutState.value
         if (state !is WorkoutState.InProgress) return@launch
@@ -138,14 +157,11 @@ class WorkoutPlayerViewModel @Inject constructor(
 
             val response = generativeModel.generateContent(prompt)
             val newExerciseName = response.text?.trim()
-            Log.d("GeminiSwap", "Cevap: $newExerciseName")
 
             if (!newExerciseName.isNullOrBlank()) {
                 val newSearchKey = newExerciseName.lowercase().replace(" ", "-")
-
                 val workout = workoutHolder.workout ?: return@launch
                 val exerciseIndex = workoutHolder.currentExerciseIndex
-
                 val updatedExercises = workout.exercises.toMutableList()
                 val originalExercise = updatedExercises[exerciseIndex]
 
@@ -153,29 +169,14 @@ class WorkoutPlayerViewModel @Inject constructor(
                     name = newExerciseName,
                     searchKey = newSearchKey
                 )
-                
                 workoutHolder.workout = workout.copy(exercises = updatedExercises)
-                
                 updateStateWithHistory(updatedExercises[exerciseIndex], workoutHolder.currentSetIndex)
             }
         } catch (e: Exception) {
-            Log.e("GeminiSwap", "Hata oluştu: ${e.message}")
             e.printStackTrace()
         } finally {
             _isSwapping.value = false
         }
-    }
-
-    private suspend fun calculateCaloriesForSet(exercise: Exercise, weightUsed: Double?) {
-        val repsAsInt = exercise.reps.split('-').first().toIntOrNull() ?: 10
-        val estimatedSetDurationSeconds = (repsAsInt * 3)
-        val userWeight = settingsManager.weightFlow.first()
-
-        val metMultiplier = if (weightUsed != null && weightUsed > 0) 1.5 else 1.0
-        val finalMet = exercise.metValue * metMultiplier
-
-        val caloriesForSet = (finalMet * 3.5 * userWeight) / 200 * (estimatedSetDurationSeconds / 60.0)
-        totalCaloriesBurned += caloriesForSet
     }
 
     private fun getDominantDifficulty(): String {
@@ -192,23 +193,19 @@ class WorkoutPlayerViewModel @Inject constructor(
     private fun finishWorkout(isPlanFinished: Boolean) {
         val totalTimeMillis = System.currentTimeMillis() - startTimeMillis
         val totalTimeMinutes = (totalTimeMillis / 60000).toInt()
-        val finalCaloriesBurned = totalCaloriesBurned.toInt()
 
         _workoutState.value = WorkoutState.Finished(
             totalTimeMinutes,
-            finalCaloriesBurned,
             sessionVolume,
             getDominantDifficulty()
         )
-
-        // Removed audioCoach.announceExercise("Antrenman tamamlandı!") to disable the sound.
 
         viewModelScope.launch {
             workoutHolder.workout?.title?.let {
                 val summary = WorkoutSummary(
                     title = it,
                     totalTimeMinutes = totalTimeMinutes,
-                    caloriesBurned = finalCaloriesBurned,
+                    caloriesBurned = 0,
                     timestamp = System.currentTimeMillis()
                 )
                 settingsManager.saveLastWorkoutSummary(summary)
@@ -229,6 +226,7 @@ class WorkoutPlayerViewModel @Inject constructor(
 
     private fun startRest(duration: Int, nextExercise: Exercise, nextSet: Int) {
         timerJob?.cancel()
+        exerciseTimerJob?.cancel()
         timerJob = viewModelScope.launch {
             var remainingTime = duration
             val initialDuration = if (duration > 0) duration else 1
@@ -280,10 +278,8 @@ class WorkoutPlayerViewModel @Inject constructor(
             val reps = it.value.toInt()
             val weight = it.weightUsed?.toInt()
             val note = it.note
-            
             val weightPart = if (weight != null && weight > 0) " @ $weight kg" else ""
             val notePart = if (!note.isNullOrBlank()) " ($note)" else ""
-            
             "Geçen Sefer: $reps Tekrar$weightPart$notePart"
         }
         
@@ -297,19 +293,60 @@ class WorkoutPlayerViewModel @Inject constructor(
         } ?: "İlk kez yapıyorsun, başarılar!"
 
         val workout = workoutHolder.workout!!
+        
+        // Handle Timed Exercises
+        val repsText = exercise.reps
+        val initialTime = when {
+            repsText.contains("Dakika") -> {
+                val mins = repsText.split(" ")[0].toIntOrNull() ?: 1
+                mins * 60
+            }
+            repsText.contains("Saniye") -> {
+                repsText.split(" ")[0].toIntOrNull() ?: 30
+            }
+            else -> null
+        }
+        
         _workoutState.value = WorkoutState.InProgress(
             exercise,
             setIndex,
             workout.exercises.size,
             workoutHolder.currentExerciseIndex + 1,
             historyHint = hint,
-            coachSuggestion = coachSuggestion
+            coachSuggestion = coachSuggestion,
+            remainingExerciseTime = initialTime
         )
+
+        if (initialTime != null) {
+            startExerciseTimer(initialTime)
+        }
+    }
+
+    private fun startExerciseTimer(seconds: Int) {
+        exerciseTimerJob?.cancel()
+        exerciseTimerJob = viewModelScope.launch {
+            var time = seconds
+            while (time > 0) {
+                val currentState = _workoutState.value
+                if (currentState is WorkoutState.InProgress) {
+                    _workoutState.value = currentState.copy(remainingExerciseTime = time)
+                }
+                delay(1000)
+                time--
+            }
+            // Auto finish when time is up
+            if (time <= 0) {
+                audioCoach.announceExercise("Süre bitti!")
+                delay(1000) // Give a second for the announcement/ui to settle
+                onSetFinished(null, "medium", "Otomatik Tamamlandı")
+            }
+        }
     }
 
     override fun onCleared() {
         super.onCleared()
         audioCoach.shutdown()
         timerJob?.cancel()
+        exerciseTimerJob?.cancel()
     }
 }

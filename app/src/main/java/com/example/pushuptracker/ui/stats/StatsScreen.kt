@@ -1,6 +1,7 @@
 package com.example.pushuptracker.ui.stats
 
 import android.graphics.Color
+import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -21,16 +22,19 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.mikephil.charting.charts.BarChart
+import com.github.mikephil.charting.charts.LineChart
 import com.github.mikephil.charting.components.XAxis
 import com.github.mikephil.charting.data.BarData
 import com.github.mikephil.charting.data.BarDataSet
 import com.github.mikephil.charting.data.BarEntry
+import com.github.mikephil.charting.data.Entry
+import com.github.mikephil.charting.data.LineData
+import com.github.mikephil.charting.data.LineDataSet
 import com.github.mikephil.charting.formatter.ValueFormatter
 import java.time.Duration
 import java.time.LocalDate
@@ -49,12 +53,10 @@ fun StatsScreen(viewModel: StatsViewModel = hiltViewModel()) {
     val healthSessions by viewModel.healthSessions.collectAsStateWithLifecycle()
     val hasHealthPermissions by viewModel.hasHealthPermissions.collectAsStateWithLifecycle()
 
-    val context = LocalContext.current
-
-    // Fix: Calling the function statically from PermissionController as requested
-    val permissionLauncher = rememberLauncherForActivityResult<Set<String>, Set<String>>(
+    val permissionLauncher = rememberLauncherForActivityResult(
         contract = PermissionController.createRequestPermissionResultContract()
     ) { grantedPermissions ->
+        Log.d("HealthConnect", "Permissions result: $grantedPermissions")
         viewModel.checkHealthPermissions()
     }
 
@@ -79,9 +81,11 @@ fun StatsScreen(viewModel: StatsViewModel = hiltViewModel()) {
                     hasPermissions = hasHealthPermissions,
                     sessions = healthSessions,
                     onConnectClick = { 
-                        permissionLauncher.launch(viewModel.getHealthPermissions()) 
+                        val perms = viewModel.getHealthPermissions()
+                        Log.d("HealthConnect", "Launching permissions with: $perms")
+                        permissionLauncher.launch(perms) 
                     },
-                    onRefreshClick = { viewModel.loadHealthSessions() }
+                    onRefreshClick = { viewModel.loadHealthData() }
                 )
             }
         }
@@ -102,6 +106,27 @@ fun OverallStatsCard(stats: OverallStats, weeklyChange: ChangeStats, monthlyChan
                 StatItem(value = stats.totalWater.toString(), label = "Toplam Su (ml)")
                 StatItem(value = stats.currentStreak.toString(), label = "Seri (Gün)")
             }
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // Total Calories Display
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(ComposeColor.Black.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Icon(Icons.Default.Sync, contentDescription = null, tint = ComposeColor(0xFF00F5D4), modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = "Toplam Yakılan: ${stats.totalCalories} kcal",
+                    color = ComposeColor.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp
+                )
+            }
+
             Spacer(modifier = Modifier.height(16.dp))
             ChangeStatsRow(label = "Haftalık Değişim", stats = weeklyChange)
             Spacer(modifier = Modifier.height(8.dp))
@@ -138,7 +163,7 @@ fun HealthConnectCard(
             Spacer(modifier = Modifier.height(16.dp))
 
             if (!hasPermissions) {
-                Text("Xiaomi Band veya diğer cihazlardaki antrenmanlarını görmek için Health Connect'e bağlan.", color = ComposeColor.Gray, fontSize = 14.sp)
+                Text("Xiaomi Band verileri (kalori vb.) için Health Connect'e bağlan.", color = ComposeColor.Gray, fontSize = 14.sp)
                 Spacer(modifier = Modifier.height(16.dp))
                 Button(
                     onClick = onConnectClick,
@@ -233,11 +258,11 @@ fun PushupChartCard(chartUiState: ChartUiState, chartTimeSpan: ChartTimeSpan, ch
         colors = CardDefaults.cardColors(containerColor = ComposeColor(0xFF2C2C2E))
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text("Şınav Grafiği", style = MaterialTheme.typography.headlineSmall, color = ComposeColor.White)
+            Text("Gelişim Grafiği", style = MaterialTheme.typography.headlineSmall, color = ComposeColor.White)
             Spacer(modifier = Modifier.height(16.dp))
             ChartControls(chartTimeSpan = chartTimeSpan, chartType = chartType, onTimeSpanSelected = { viewModel.setChartTimeSpan(it) }, onTypeSelected = { viewModel.setChartType(it) })
             Spacer(modifier = Modifier.height(16.dp))
-            StatsChart(chartUiState = chartUiState, timeSpan = chartTimeSpan, modifier = Modifier
+            StatsChart(chartUiState = chartUiState, timeSpan = chartTimeSpan, chartType = chartType, modifier = Modifier
                 .fillMaxWidth()
                 .height(250.dp))
         }
@@ -249,7 +274,8 @@ fun ChartControls(chartTimeSpan: ChartTimeSpan, chartType: ChartType, onTimeSpan
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
         SegmentedButton(text = "Haftalık", isSelected = chartTimeSpan == ChartTimeSpan.WEEK, onClick = { onTimeSpanSelected(ChartTimeSpan.WEEK) })
         SegmentedButton(text = "Yıllık", isSelected = chartTimeSpan == ChartTimeSpan.YEAR, onClick = { onTimeSpanSelected(ChartTimeSpan.YEAR) })
-        Spacer(modifier = Modifier.width(16.dp))
+        Spacer(modifier = Modifier.width(8.dp))
+        SegmentedButton(text = "Çizgi", isSelected = chartType == ChartType.LINE, onClick = { onTypeSelected(ChartType.LINE) })
         SegmentedButton(text = "Bar", isSelected = chartType == ChartType.BAR, onClick = { onTypeSelected(ChartType.BAR) })
     }
 }
@@ -262,90 +288,122 @@ fun SegmentedButton(text: String, isSelected: Boolean, onClick: () -> Unit, enab
         onClick = onClick,
         enabled = enabled,
         shape = RoundedCornerShape(12.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = if (isSelected) selectedColor else unselectedColor, contentColor = if (isSelected) ComposeColor.Black else ComposeColor.White)
+        colors = ButtonDefaults.buttonColors(containerColor = if (isSelected) selectedColor else unselectedColor, contentColor = if (isSelected) ComposeColor.Black else ComposeColor.White),
+        contentPadding = PaddingValues(horizontal = 12.dp)
     ) {
-        Text(text)
+        Text(text, fontSize = 12.sp)
     }
 }
 
 
 @Composable
-fun StatsChart(chartUiState: ChartUiState, timeSpan: ChartTimeSpan, modifier: Modifier = Modifier) {
-    val onSurfaceColor = MaterialTheme.colorScheme.onSurface.toArgb()
+fun StatsChart(chartUiState: ChartUiState, timeSpan: ChartTimeSpan, chartType: ChartType, modifier: Modifier = Modifier) {
     val chartColor = ComposeColor(0xFF00F5D4).toArgb()
 
-    AndroidView(
-        modifier = modifier,
-        factory = { context ->
-            BarChart(context).apply {
-                description.isEnabled = false
-                xAxis.position = XAxis.XAxisPosition.BOTTOM
-                xAxis.setDrawGridLines(false)
-                xAxis.textColor = Color.WHITE
-                xAxis.granularity = 1f
-                axisLeft.setDrawGridLines(true)
-                axisLeft.textColor = Color.WHITE
-                axisLeft.axisMinimum = 0f
-                axisRight.isEnabled = false
-                legend.isEnabled = false
-                setTouchEnabled(true)
-                setScaleEnabled(true)
-                isDragEnabled = true
-            }
-        },
-        update = { chart ->
-            val entries = when (timeSpan) {
-                ChartTimeSpan.WEEK -> {
-                    val startDate = LocalDate.now().minusDays(6)
-                    (0..6).map {
-                        val date = startDate.plusDays(it.toLong())
-                        val record = chartUiState.records.find { r -> LocalDate.parse(r.date) == date }
-                        BarEntry(it.toFloat(), record?.value?.toFloat() ?: 0f)
+    key(chartType) {
+        AndroidView(
+            modifier = modifier,
+            factory = { context ->
+                if (chartType == ChartType.BAR) {
+                    BarChart(context).apply {
+                        description.isEnabled = false
+                        xAxis.position = XAxis.XAxisPosition.BOTTOM
+                        xAxis.setDrawGridLines(false)
+                        xAxis.textColor = Color.WHITE
+                        xAxis.granularity = 1f
+                        axisLeft.setDrawGridLines(true)
+                        axisLeft.textColor = Color.WHITE
+                        axisLeft.axisMinimum = 0f
+                        axisRight.isEnabled = false
+                        legend.isEnabled = false
+                    }
+                } else {
+                    LineChart(context).apply {
+                        description.isEnabled = false
+                        xAxis.position = XAxis.XAxisPosition.BOTTOM
+                        xAxis.setDrawGridLines(false)
+                        xAxis.textColor = Color.WHITE
+                        xAxis.granularity = 1f
+                        axisLeft.setDrawGridLines(true)
+                        axisLeft.textColor = Color.WHITE
+                        axisLeft.axisMinimum = 0f
+                        axisRight.isEnabled = false
+                        legend.isEnabled = false
                     }
                 }
-                ChartTimeSpan.YEAR -> {
-                    val startDate = LocalDate.now().minusMonths(11).withDayOfMonth(1)
-                    (0..11).map {
-                        val month = startDate.plusMonths(it.toLong())
-                        val monthValue = chartUiState.records.filter { r ->
-                            val recordDate = LocalDate.parse(r.date)
-                            recordDate.year == month.year && recordDate.month == month.month
-                        }.sumOf { it.value }.toFloat()
-                        BarEntry(it.toFloat(), monthValue)
-                    }
-                }
-            }
-
-            val dataSet = BarDataSet(entries, "").apply {
-                color = chartColor
-                valueTextColor = onSurfaceColor
-                setDrawValues(false)
-            }
-
-            chart.data = BarData(dataSet).apply { barWidth = 0.5f }
-
-            chart.xAxis.valueFormatter = object : ValueFormatter() {
-                override fun getFormattedValue(value: Float): String {
-                    return try {
-                        when (timeSpan) {
-                            ChartTimeSpan.WEEK -> {
-                                val date = LocalDate.now().minusDays(6).plusDays(value.toLong())
-                                date.format(DateTimeFormatter.ofPattern("dd MMM"))
-                            }
-                            ChartTimeSpan.YEAR -> {
-                                val month = LocalDate.now().minusMonths(11).withDayOfMonth(1).plusMonths(value.toLong())
-                                month.format(DateTimeFormatter.ofPattern("MMM"))
-                            }
+            },
+            update = { chart ->
+                val today = LocalDate.now()
+                val rawEntries = when (timeSpan) {
+                    ChartTimeSpan.WEEK -> {
+                        val startDate = today.minusDays(6)
+                        (0..6).map {
+                            val date = startDate.plusDays(it.toLong())
+                            val record = chartUiState.records.find { r -> LocalDate.parse(r.date) == date }
+                            Entry(it.toFloat(), record?.value?.toFloat() ?: 0f)
                         }
-                    } catch (e: Exception) {
-                        ""
+                    }
+                    ChartTimeSpan.YEAR -> {
+                        // Start 11 months ago to show a total of 12 months
+                        val startDate = today.minusMonths(11).withDayOfMonth(1)
+                        (0..11).map {
+                            val targetMonth = startDate.plusMonths(it.toLong())
+                            val monthValue = chartUiState.records.filter { r ->
+                                val recordDate = LocalDate.parse(r.date)
+                                recordDate.year == targetMonth.year && recordDate.month == targetMonth.month
+                            }.sumOf { it.value }.toFloat()
+                            Entry(it.toFloat(), monthValue)
+                        }
                     }
                 }
-            }
 
-            chart.setVisibleXRangeMaximum(if (timeSpan == ChartTimeSpan.WEEK) 7f else 12f)
-            chart.moveViewToX(entries.size.toFloat())
-            chart.invalidate()
-        }
-    )
+                if (chart is BarChart && chartType == ChartType.BAR) {
+                    val barEntries = rawEntries.map { BarEntry(it.x, it.y) }
+                    val dataSet = BarDataSet(barEntries, "").apply {
+                        color = chartColor
+                        setDrawValues(false)
+                    }
+                    chart.data = BarData(dataSet).apply { barWidth = 0.5f }
+                } else if (chart is LineChart && chartType == ChartType.LINE) {
+                    val dataSet = LineDataSet(rawEntries, "").apply {
+                        color = chartColor
+                        setCircleColor(chartColor)
+                        lineWidth = 2f
+                        circleRadius = 4f
+                        setDrawFilled(true)
+                        fillColor = chartColor
+                        fillAlpha = 50
+                        mode = LineDataSet.Mode.CUBIC_BEZIER
+                        setDrawValues(false)
+                    }
+                    chart.data = LineData(dataSet)
+                }
+
+                chart.xAxis.valueFormatter = object : ValueFormatter() {
+                    override fun getFormattedValue(value: Float): String {
+                        val idx = value.toInt()
+                        if (idx < 0 || idx >= rawEntries.size) return ""
+                        return try {
+                            when (timeSpan) {
+                                ChartTimeSpan.WEEK -> {
+                                    today.minusDays((6 - idx).toLong()).format(DateTimeFormatter.ofPattern("dd MMM"))
+                                }
+                                ChartTimeSpan.YEAR -> {
+                                    today.minusMonths((11 - idx).toLong()).format(DateTimeFormatter.ofPattern("MMM"))
+                                }
+                            }
+                        } catch (e: Exception) {
+                            ""
+                        }
+                    }
+                }
+
+                chart.xAxis.labelCount = if (timeSpan == ChartTimeSpan.WEEK) 7 else 12
+                chart.xAxis.axisMinimum = -0.5f
+                chart.xAxis.axisMaximum = rawEntries.size.toFloat() - 0.5f
+                
+                chart.invalidate()
+            }
+        )
+    }
 }

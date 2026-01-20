@@ -6,42 +6,15 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
@@ -144,6 +117,7 @@ fun WorkoutPlayerScreen(navController: NavController, viewModel: WorkoutPlayerVi
                         set = currentState.currentSet,
                         historyHint = currentState.historyHint,
                         coachSuggestion = currentState.coachSuggestion,
+                        remainingTime = currentState.remainingExerciseTime,
                         isSwapping = isSwapping,
                         onSwap = { viewModel.swapCurrentExercise() },
                         onSetFinished = { weight, difficulty, note -> viewModel.onSetFinished(weight, difficulty, note) }
@@ -157,7 +131,6 @@ fun WorkoutPlayerScreen(navController: NavController, viewModel: WorkoutPlayerVi
                     )
                     is WorkoutState.Finished -> FinishedScreen(
                         totalTimeMinutes = currentState.totalTimeMinutes,
-                        caloriesBurned = currentState.caloriesBurned,
                         totalVolume = currentState.totalVolume,
                         dominantDifficulty = currentState.dominantDifficulty,
                         onNavigateToPrograms = { 
@@ -200,6 +173,7 @@ fun ExerciseScreen(
     set: Int,
     historyHint: String?,
     coachSuggestion: String?,
+    remainingTime: Int?,
     isSwapping: Boolean,
     onSwap: () -> Unit,
     onSetFinished: (weightUsed: Double?, difficulty: String, note: String?) -> Unit
@@ -207,7 +181,16 @@ fun ExerciseScreen(
     val scope = rememberCoroutineScope()
     var buttonClicked by remember(exercise.searchKey, set) { mutableStateOf(false) }
     
-    // Parse weight and note from historyHint if available
+    // Updated Warmup detection logic with more keywords
+    val isWarmup = remember(exercise.name) {
+        val warmupKeywords = listOf(
+            "Isınma", "Çevirme", "Döndürme", "Jumping", "Kedi-Deve", 
+            "Scapular", "Duvarda", "Leg Swing", "Pull Apart", 
+            "Bodyweight Squat", "Melek", "Stretch"
+        )
+        warmupKeywords.any { exercise.name.contains(it, ignoreCase = true) } || remainingTime != null
+    }
+
     val initialWeight = remember(historyHint) {
         historyHint?.substringAfter("@ ", "")?.substringBefore(" kg") ?: ""
     }
@@ -217,16 +200,6 @@ fun ExerciseScreen(
 
     var weightInput by remember(exercise.searchKey) { mutableStateOf(initialWeight) }
     var noteInput by remember(exercise.searchKey) { mutableStateOf(initialNote) }
-
-    val oneRepMax = remember(weightInput, exercise.reps) {
-        val weight = weightInput.toDoubleOrNull() ?: 0.0
-        val reps = exercise.reps.split("-").first().toIntOrNull() ?: 10
-        if (weight > 0) {
-            (weight * (1 + (reps.toDouble() / 30.0))).roundToInt()
-        } else {
-            0
-        }
-    }
 
     val initialProgress = remember(exercise.sets, set) { if (exercise.sets > 0) (set - 1).toFloat() / exercise.sets.toFloat() else 0f }
     val finalProgress = remember(exercise.sets, set) { if (exercise.sets > 0) set.toFloat() / exercise.sets.toFloat() else 0f }
@@ -261,23 +234,18 @@ fun ExerciseScreen(
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
-        modifier = Modifier
-            .padding(16.dp)
-            .fillMaxSize()
+        modifier = Modifier.padding(16.dp).fillMaxSize()
     ) {
         Spacer(Modifier.weight(1f))
 
         Box(
             contentAlignment = Alignment.Center,
-            modifier = Modifier
-                .size(250.dp)
-                .scale(pulseScale)
+            modifier = Modifier.size(250.dp).scale(pulseScale)
         ) {
             val strokeWidth = 16.dp
-            val trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)
             Canvas(modifier = Modifier.fillMaxSize()) {
                 drawArc(
-                    color = trackColor,
+                    color = Color.White.copy(alpha = 0.2f),
                     startAngle = -90f,
                     sweepAngle = 360f,
                     useCenter = false,
@@ -292,48 +260,57 @@ fun ExerciseScreen(
                 )
             }
 
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                if (remainingTime != null) {
                     Text(
-                        text = "$set. Set",
-                        style = MaterialTheme.typography.displaySmall.copy(
+                        text = "$remainingTime",
+                        style = MaterialTheme.typography.displayLarge.copy(
                             color = Color.White,
+                            fontSize = 100.sp,
+                            shadow = Shadow(Color.Black, blurRadius = 12f)
+                        )
+                    )
+                    Text("Saniye Kaldı", style = MaterialTheme.typography.titleMedium, color = Color.White.copy(alpha = 0.8f))
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = if (isWarmup) "Isınma" else "$set. Set",
+                            style = MaterialTheme.typography.displaySmall.copy(
+                                color = Color.White,
+                                shadow = Shadow(Color.Black, blurRadius = 8f)
+                            )
+                        )
+                        if (isSwapping) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp).padding(start = 8.dp), strokeWidth = 2.dp)
+                        } else if (!isWarmup) {
+                            IconButton(onClick = onSwap) {
+                                Icon(Icons.Default.Refresh, contentDescription = "Egzersizi Değiştir", tint = Color.White.copy(alpha = 0.7f))
+                            }
+                        }
+                    }
+                    Text(
+                        text = "Hedef: ${exercise.reps}",
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            color = Color.White.copy(alpha = 0.8f),
                             shadow = Shadow(Color.Black, blurRadius = 8f)
                         )
                     )
-                    if (isSwapping) {
-                        CircularProgressIndicator(modifier = Modifier.size(24.dp).padding(start = 8.dp), strokeWidth = 2.dp)
-                    } else {
-                        IconButton(onClick = onSwap) {
-                            Icon(Icons.Default.Refresh, contentDescription = "Egzersizi Değiştir", tint = Color.White.copy(alpha = 0.7f))
-                        }
-                    }
                 }
-                Text(
-                    text = "Hedef: ${exercise.reps}",
-                    style = MaterialTheme.typography.titleLarge.copy(
-                        color = Color.White.copy(alpha = 0.8f),
-                        shadow = Shadow(Color.Black, blurRadius = 8f)
-                    )
-                )
             }
         }
         
         Spacer(Modifier.weight(1f))
 
-        if (historyHint != null) {
+        if (!isWarmup && historyHint != null) {
             Text(
                 text = historyHint,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                color = Color.White.copy(alpha = 0.7f),
                 modifier = Modifier.padding(bottom = 4.dp)
             )
         }
         
-        if (coachSuggestion != null) {
+        if (!isWarmup && coachSuggestion != null) {
             Text(
                 text = "💡 $coachSuggestion",
                 style = MaterialTheme.typography.bodySmall,
@@ -342,91 +319,94 @@ fun ExerciseScreen(
             )
         }
 
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(
-                value = weightInput,
-                onValueChange = { weightInput = it },
-                label = { Text("Ağırlık (kg)") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                singleLine = true,
-                modifier = Modifier.weight(1f)
-            )
-            OutlinedTextField(
-                value = noteInput,
-                onValueChange = { noteInput = it },
-                label = { Text("Not (Plaka/Ayar)") },
-                singleLine = true,
-                modifier = Modifier.weight(1f)
-            )
-        }
-
-        if (oneRepMax > 0) {
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "✨ Tahmini 1RM: $oneRepMax kg",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                modifier = Modifier.fillMaxWidth()
-            )
+        if (!isWarmup) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = weightInput,
+                    onValueChange = { weightInput = it },
+                    label = { Text("Ağırlık (kg)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    singleLine = true,
+                    modifier = Modifier.weight(1f),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        unfocusedBorderColor = Color.White.copy(alpha = 0.5f),
+                        unfocusedLabelColor = Color.White.copy(alpha = 0.7f),
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White
+                    )
+                )
+                OutlinedTextField(
+                    value = noteInput,
+                    onValueChange = { noteInput = it },
+                    label = { Text("Not (Plaka/Ayar)") },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        unfocusedBorderColor = Color.White.copy(alpha = 0.5f),
+                        unfocusedLabelColor = Color.White.copy(alpha = 0.7f),
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White
+                    )
+                )
+            }
         }
         
         Spacer(Modifier.height(16.dp))
 
-        // Note: Weight is no longer strictly required if a note is provided, but at least one should be present or we can allow empty.
-        // Let's keep it enabled if user wants to just record reps.
-        val canFinish = !buttonClicked
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
+        if (isWarmup) {
             Button(
                 onClick = {
                     if (!buttonClicked) {
                         buttonClicked = true
-                        scope.launch { 
-                            delay(800L)
-                            onSetFinished(weightInput.toDoubleOrNull(), "easy", noteInput)
-                        }
+                        scope.launch { delay(500L); onSetFinished(null, "medium", "Isınma Tamamlandı") }
                     }
                 },
-                enabled = canFinish,
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)),
-                modifier = Modifier.weight(1f)
+                enabled = !buttonClicked,
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                modifier = Modifier.fillMaxWidth().height(56.dp)
             ) {
-                Text("Kolay")
+                Icon(Icons.Default.Check, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Tamamla", style = MaterialTheme.typography.titleLarge)
             }
-            Button(
-                onClick = {
-                    if (!buttonClicked) {
-                        buttonClicked = true
-                        scope.launch { 
-                            delay(800L)
-                            onSetFinished(weightInput.toDoubleOrNull(), "medium", noteInput)
-                        }
-                    }
-                },
-                enabled = canFinish,
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFC107)),
-                modifier = Modifier.weight(1f)
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text("Orta")
-            }
-            Button(
-                onClick = {
-                    if (!buttonClicked) {
-                        buttonClicked = true
-                        scope.launch { 
-                            delay(800L)
-                            onSetFinished(weightInput.toDoubleOrNull(), "hard", noteInput)
+                Button(
+                    onClick = {
+                        if (!buttonClicked) {
+                            buttonClicked = true
+                            scope.launch { delay(800L); onSetFinished(weightInput.toDoubleOrNull(), "easy", noteInput) }
                         }
-                    }
-                },
-                enabled = canFinish,
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF44336)),
-                modifier = Modifier.weight(1f)
-            ) {
-                Text("Zor")
+                    },
+                    enabled = !buttonClicked,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)),
+                    modifier = Modifier.weight(1f)
+                ) { Text("Kolay") }
+                Button(
+                    onClick = {
+                        if (!buttonClicked) {
+                            buttonClicked = true
+                            scope.launch { delay(800L); onSetFinished(weightInput.toDoubleOrNull(), "medium", noteInput) }
+                        }
+                    },
+                    enabled = !buttonClicked,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFC107)),
+                    modifier = Modifier.weight(1f)
+                ) { Text("Orta") }
+                Button(
+                    onClick = {
+                        if (!buttonClicked) {
+                            buttonClicked = true
+                            scope.launch { delay(800L); onSetFinished(weightInput.toDoubleOrNull(), "hard", noteInput) }
+                        }
+                    },
+                    enabled = !buttonClicked,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF44336)),
+                    modifier = Modifier.weight(1f)
+                ) { Text("Zor") }
             }
         }
     }
@@ -454,7 +434,13 @@ fun RestScreen(restTime: Int, initialDuration: Int, nextExerciseName: String, on
             Text("$restTime", style = MaterialTheme.typography.displayLarge.copy(fontSize = 100.sp, color = Color.White, shadow = Shadow(Color.Black, blurRadius = 12f)))
         }
         Spacer(Modifier.height(16.dp))
-        Text("Sıradaki: $nextExerciseName", style = MaterialTheme.typography.headlineSmall.copy(color = Color.White, shadow = Shadow(Color.Black, blurRadius = 8f)))
+        Text(
+            text = "Sıradaki: $nextExerciseName", 
+            style = MaterialTheme.typography.headlineSmall.copy(
+                color = Color.White, 
+                shadow = Shadow(Color.Black, blurRadius = 8f)
+            )
+        )
         Spacer(Modifier.height(32.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
             Button(onClick = onSkip, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)) {
@@ -470,7 +456,6 @@ fun RestScreen(restTime: Int, initialDuration: Int, nextExerciseName: String, on
 @Composable
 fun FinishedScreen(
     totalTimeMinutes: Int, 
-    caloriesBurned: Int,
     totalVolume: Double,
     dominantDifficulty: String,
     onNavigateToPrograms: () -> Unit,
@@ -488,24 +473,22 @@ fun FinishedScreen(
         Row(modifier = Modifier.fillMaxWidth()) {
             InfoCard(title = "Süre", value = "$totalTimeMinutes dk", modifier = Modifier.weight(1f))
             Spacer(modifier = Modifier.padding(8.dp))
-            InfoCard(title = "Yakılan Kalori", value = "≈ $caloriesBurned kcal", modifier = Modifier.weight(1f))
+            val volumeText = if (totalVolume > 1000) "${(totalVolume / 1000).toInt()} Ton" else "${totalVolume.toInt()} kg"
+            InfoCard(title = "Toplam Yük", value = volumeText, modifier = Modifier.weight(1f))
         }
         Spacer(Modifier.height(16.dp))
         Row(modifier = Modifier.fillMaxWidth()) {
-            val volumeText = if (totalVolume > 1000) "${(totalVolume / 1000).toInt()} Ton" else "${totalVolume.toInt()} kg"
-            InfoCard(title = "Toplam Yük", value = volumeText, modifier = Modifier.weight(1f))
-            Spacer(modifier = Modifier.padding(8.dp))
             InfoCard(title = "Hissiyat", value = dominantDifficulty, modifier = Modifier.weight(1f))
         }
 
-        Spacer(Modifier.height(48.dp))
+        Spacer(modifier = Modifier.height(48.dp))
         
         Button(onClick = onNavigateToPrograms, modifier = Modifier.fillMaxWidth().height(52.dp)) {
             Text("Programa Dön", style = MaterialTheme.typography.titleLarge)
         }
         Spacer(Modifier.height(16.dp))
         OutlinedButton(onClick = onNavigateToHome, modifier = Modifier.fillMaxWidth().height(52.dp)) {
-            Text("Ana Sayfa", style = MaterialTheme.typography.titleLarge)
+            Text("Ana Sayfa", style = MaterialTheme.typography.titleLarge, color = Color.White)
         }
     }
 }

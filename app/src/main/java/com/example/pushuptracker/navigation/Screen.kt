@@ -17,4 +17,7 @@ sealed class Screen(val route: String, @field:StringRes val titleRes: Int, val i
     object Achievements : Screen("achievements", R.string.achievements, Icons.Rounded.EmojiEvents)
     object Profile : Screen("profile", R.string.profile, Icons.Rounded.Person)
     object WorkoutPlayer : Screen("workout_player", R.string.programs, null)
+    object WorkoutEditor : Screen("workout_editor/{workoutId}", R.string.programs, null) {
+        fun createRoute(workoutId: Long) = "workout_editor/$workoutId"
+    }
 }

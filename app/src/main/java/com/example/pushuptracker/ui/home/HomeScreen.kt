@@ -1,47 +1,20 @@
 package com.example.pushuptracker.ui.home
 
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.TouchApp
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -55,17 +28,12 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.airbnb.lottie.compose.LottieAnimation
-import com.airbnb.lottie.compose.LottieClipSpec
-import com.airbnb.lottie.compose.LottieCompositionSpec
-import com.airbnb.lottie.compose.LottieConstants
-import com.airbnb.lottie.compose.animateLottieCompositionAsState
-import com.airbnb.lottie.compose.rememberLottieAnimatable
-import com.airbnb.lottie.compose.rememberLottieComposition
+import com.airbnb.lottie.compose.*
 import com.example.pushuptracker.R
 import com.example.pushuptracker.model.Activities
 import com.example.pushuptracker.model.Streak
@@ -76,6 +44,7 @@ import com.example.pushuptracker.model.TrackableActivity
 fun HomeScreen(viewModel: HomeViewModel = hiltViewModel()) {
     val uiState by viewModel.homeScreenState.collectAsStateWithLifecycle()
     var showAddDialog by remember { mutableStateOf<TrackableActivity?>(null) }
+    var showAutoTracker by remember { mutableStateOf(false) }
     var showCelebration by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -112,17 +81,23 @@ fun HomeScreen(viewModel: HomeViewModel = hiltViewModel()) {
     ) {
             padding ->
         Box(modifier = Modifier.fillMaxSize()){
-            Column(
+            LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding)
                     .padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.SpaceEvenly,
+                verticalArrangement = Arrangement.spacedBy(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Activities.allActivities.forEach { activity ->
-                    ActivityCard(viewModel = viewModel, activity = activity, onAddClick = { showAddDialog = activity })
+                items(Activities.allActivities) { activity ->
+                    ActivityCard(
+                        viewModel = viewModel, 
+                        activity = activity, 
+                        onAddClick = { showAddDialog = activity },
+                        onAutoTrackClick = { if(activity.id == "pushups") showAutoTracker = true }
+                    )
                 }
+                item { Spacer(modifier = Modifier.height(16.dp)) }
             }
 
             showAddDialog?.let {
@@ -131,11 +106,21 @@ fun HomeScreen(viewModel: HomeViewModel = hiltViewModel()) {
                     onDismiss = { showAddDialog = null },
                     onSave = { value ->
                         viewModel.addRecord(it.id, value) { goalReached ->
-                            if (goalReached) {
-                                showCelebration = true
-                            }
+                            if (goalReached) showCelebration = true
                         }
                         showAddDialog = null
+                    }
+                )
+            }
+
+            if (showAutoTracker) {
+                AutoPushupTrackerDialog(
+                    onDismiss = { showAutoTracker = false },
+                    onFinish = { count ->
+                        viewModel.addRecord("pushups", count.toDouble()) { goalReached ->
+                            if (goalReached) showCelebration = true
+                        }
+                        showAutoTracker = false
                     }
                 )
             }
@@ -149,19 +134,76 @@ fun HomeScreen(viewModel: HomeViewModel = hiltViewModel()) {
                     modifier = Modifier.fillMaxSize()
                 )
 
-                val firewallComposition by rememberLottieComposition(LottieCompositionSpec.RawRes(R.raw.firewall))
-                val firewallProgress by animateLottieCompositionAsState(composition = firewallComposition)
-                LottieAnimation(
-                    composition = firewallComposition,
-                    progress = { firewallProgress },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .align(Alignment.BottomCenter)
-                )
-
                 if (trophyProgress == 1.0f) {
                     showCelebration = false
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun AutoPushupTrackerDialog(
+    onDismiss: () -> Unit,
+    onFinish: (Int) -> Unit,
+    viewModel: HomeViewModel = hiltViewModel()
+) {
+    var count by remember { mutableStateOf(0) }
+    
+    // Sensör dinlemeyi başlat
+    DisposableEffect(Unit) {
+        viewModel.startAutoPushupCounting { newCount ->
+            count = newCount
+        }
+        onDispose {
+            viewModel.stopAutoPushupCounting()
+        }
+    }
+
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = Color.Black.copy(alpha = 0.95f)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                "Şınav Takibi Aktif",
+                style = MaterialTheme.typography.headlineMedium,
+                color = Color.White
+            )
+            Text(
+                "Burnunuzu ekrana yaklaştırın",
+                style = MaterialTheme.typography.bodyLarge,
+                color = Color.Gray,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+            
+            Spacer(modifier = Modifier.height(64.dp))
+            
+            Text(
+                text = count.toString(),
+                style = MaterialTheme.typography.displayLarge.copy(fontSize = 120.sp),
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.ExtraBold
+            )
+            
+            Spacer(modifier = Modifier.height(64.dp))
+            
+            Button(
+                onClick = { onFinish(count) },
+                modifier = Modifier.fillMaxWidth().height(56.dp)
+            ) {
+                Text("Bitir ve Kaydet", style = MaterialTheme.typography.titleLarge)
+            }
+            
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.padding(top = 16.dp)
+            ) {
+                Text("İptal Et", color = Color.Red)
             }
         }
     }
@@ -239,7 +281,8 @@ fun StreakIcon(streak: Streak) {
 fun ActivityCard(
     viewModel: HomeViewModel,
     activity: TrackableActivity, 
-    onAddClick: () -> Unit
+    onAddClick: () -> Unit,
+    onAutoTrackClick: () -> Unit
 ) {
     val todayRecord by viewModel.getTodayRecord(activity.id).collectAsStateWithLifecycle(null)
     val yesterdayRecord by viewModel.getYesterdayRecord(activity.id).collectAsStateWithLifecycle(null)
@@ -254,7 +297,6 @@ fun ActivityCard(
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp)) 
     ) {
-        // Main Content
         Column {
             Box(modifier = Modifier.fillMaxWidth().height(140.dp)) {
                 Image(
@@ -263,17 +305,28 @@ fun ActivityCard(
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop
                 )
-                 // Black overlay for better text contrast
                 Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.2f)))
 
-                FloatingActionButton(
-                    onClick = onAddClick,
-                    modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp),
-                    shape = CircleShape,
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = stringResource(R.string.add))
+                Row(modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp)) {
+                    if (activity.id == "pushups") {
+                        FloatingActionButton(
+                            onClick = onAutoTrackClick,
+                            modifier = Modifier.padding(end = 8.dp),
+                            shape = CircleShape,
+                            containerColor = MaterialTheme.colorScheme.secondary,
+                            contentColor = MaterialTheme.colorScheme.onSecondary
+                        ) {
+                            Icon(Icons.Default.TouchApp, contentDescription = "Otomatik Say")
+                        }
+                    }
+                    FloatingActionButton(
+                        onClick = onAddClick,
+                        shape = CircleShape,
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = stringResource(R.string.add))
+                    }
                 }
             }
 
@@ -321,13 +374,11 @@ fun GradientProgressBar(progress: Float) {
     val backgroundColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
 
     Canvas(modifier = Modifier.fillMaxWidth().height(12.dp)) {
-        // Background of the progress bar
         drawRoundRect(
             color = backgroundColor,
             cornerRadius = CornerRadius(10f, 10f),
             size = size
         )
-        // Foreground (progress)
         drawRoundRect(
             brush = gradient,
             cornerRadius = CornerRadius(10f, 10f),
@@ -354,7 +405,7 @@ fun AddRecordDialog(
     var input by remember { mutableStateOf("") }
 
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { onDismiss() },
         title = { Text(text = "${activity.name} Ekle") },
         text = {
             OutlinedTextField(
@@ -377,7 +428,7 @@ fun AddRecordDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = { onDismiss() }) {
                 Text(stringResource(R.string.cancel))
             }
         }

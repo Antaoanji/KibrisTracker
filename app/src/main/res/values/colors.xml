@@ -2,13 +2,6 @@
 <resources>
     <!-- Neon Pulse Theme -->
     <color name="deep_space_background">#121212</color>
-    <color name="deep_space_surface">#1E1E1E</color>
-    <color name="deep_space_text">#FFFFFF</color>
-    <color name="deep_space_secondary_text">#AFAFAF</color>
-    <color name="electric_teal_primary">#00F5D4</color>
-    <color name="vibrant_magenta_accent">#FF007F</color>
 
     <!-- Standard Black and White -->
-    <color name="black">#000000</color>
-    <color name="white">#FFFFFF</color>
 </resources>

@@ -1,47 +1,50 @@
 [versions]
 # Build Tools
-kotlin = "2.3.0"
-ksp = "2.3.3"
-agp = "8.13.0"
+agp = "8.7.3"
+kotlin = "2.0.21" # Kararlı ve güvenli sürüm
+ksp = "2.0.21-1.0.28" # Kotlin 2.0.21 ile uyumlu
 
-# AndroidX & UI
+# AndroidX & UI (KARARLI SÜRÜMLERE DÜŞÜRÜLDÜ)
 coreKtx = "1.15.0"
-activityCompose = "1.12.2"
-navigation = "2.9.6"
-lifecycle = "2.9.3"
-room = "2.8.4"
-work = "2.11.0"
-composeBom = "2025.12.01"
-composeUi = "1.7.0-beta03" # Added for fonts
-paging = "3.4.0"
-datastore = "1.1.7"
-lottie = "6.4.1"
+activityCompose = "1.9.3"
+navigation = "2.8.5"
+lifecycle = "2.8.7"
+room = "2.6.1"
+work = "2.10.0"
+composeBom = "2024.11.00" # 2026 hatalıydı, güncel kararlı sürüm bu.
+composeUi = "1.7.5"
+paging = "3.3.4"
+datastore = "1.1.1"
+lottie = "6.6.0"
 protobuf = "3.25.5"
 
+# Health Connect (SDK 35 İçin Uyumlu Sürüm)
+healthConnect = "1.1.0-alpha11"
+
 # Firebase
-firebaseBom = "34.7.0"
+firebaseBom = "33.7.0"
 
 # Dependency Injection
-hilt = "2.57.2"
+hilt = "2.51.1" # Çok kullanılan kararlı sürüm
 androidxHilt = "1.2.0"
 
 # Networking & Serialization
-retrofit = "3.0.0"
-okhttp = "5.3.0"
-moshi = "1.15.0"
-kotlinxSerialization = "1.8.0"
-kotlinxCoroutines = "1.10.1"
+retrofit = "2.11.0"
+okhttp = "4.12.0" # 5.x alpha'dır, 4.12 stable'dır.
+moshi = "1.15.1"
+kotlinxSerialization = "1.7.3"
+kotlinxCoroutines = "1.9.0"
 kotlinxDatetime = "0.6.1"
 
 # Image Loading
-coilCompose = "2.6.0"
+coilCompose = "2.7.0"
 
 # Charting
 mpandroidchart = "v3.1.0"
 
 # Testing
-mockito = "5.15.2"
-mockwebserver = "5.0.0-alpha.14"
+mockito = "5.12.0"
+mockwebserver = "4.12.0"
 junit = "4.13.2"
 androidxTestExtJunit = "1.2.1"
 espressoCore = "3.6.1"
@@ -55,6 +58,7 @@ androidx-lifecycle-runtime-compose = { group = "androidx.lifecycle", name = "lif
 androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
 androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore" }
 androidx-work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "work" }
+androidx-health-connect-client = { group = "androidx.health.connect", name = "connect-client", version.ref = "healthConnect" }
 
 # Compose
 androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
@@ -64,7 +68,7 @@ androidx-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
 androidx-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
 androidx-material3 = { group = "androidx.compose.material3", name = "material3" }
 androidx-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended" }
-androidx-ui-text-google-fonts = { group = "androidx.compose.ui", name = "ui-text-google-fonts", version.ref = "composeUi" } # Added Google Fonts
+androidx-ui-text-google-fonts = { group = "androidx.compose.ui", name = "ui-text-google-fonts", version.ref = "composeUi" }
 
 # Navigation
 androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigation" }
@@ -104,7 +108,6 @@ mpandroidchart = { group = "com.github.PhilJay", name = "MPAndroidChart", versio
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "kotlinxCoroutines" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
 kotlinx-datetime = { group = "org.jetbrains.kotlinx", name = "kotlinx-datetime", version.ref = "kotlinxDatetime" }
-
 
 # Testing
 junit = { group = "junit", name = "junit", version.ref = "junit" }

@@ -2,6 +2,7 @@ package com.example.pushuptracker.di
 
 import android.content.Context
 import androidx.room.Room
+import com.example.pushuptracker.data.local.CustomWorkoutDao
 import com.example.pushuptracker.data.local.PushupDao
 import com.example.pushuptracker.data.local.WaterDao
 import com.example.pushuptracker.data.repo.PushupRepo
@@ -38,6 +39,12 @@ object DatabaseModule {
     @Singleton
     fun provideWaterDao(appDatabase: AppDatabase): WaterDao {
         return appDatabase.waterDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideCustomWorkoutDao(appDatabase: AppDatabase): CustomWorkoutDao {
+        return appDatabase.customWorkoutDao()
     }
 
     @Provides
