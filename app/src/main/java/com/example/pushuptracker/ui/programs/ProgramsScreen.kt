@@ -1,5 +1,7 @@
 package com.example.pushuptracker.ui.programs
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -12,6 +14,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -24,7 +28,9 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -32,12 +38,13 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.example.pushuptracker.R
-import com.example.pushuptracker.data.WorkoutData
 import com.example.pushuptracker.model.Workout
 import com.example.pushuptracker.model.WorkoutSummary
 import com.example.pushuptracker.navigation.Screen
-import kotlinx.coroutines.launch
+import com.example.pushuptracker.util.YoutubeUtils
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
@@ -57,6 +64,7 @@ fun ProgramsScreen(
 
     var showInfoSheet by remember { mutableStateOf(false) }
     var selectedDayIndex by remember { mutableIntStateOf(-1) }
+    var showResetMenu by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState()
 
     LaunchedEffect(eventState.navigateToPlayer) {
@@ -74,6 +82,16 @@ fun ProgramsScreen(
         DayOfWeek.FRIDAY -> 3
         DayOfWeek.SATURDAY -> 4
         else -> -1
+    }
+
+    if (showResetMenu) {
+        ResetProgramsDialog(
+            onDismiss = { showResetMenu = false },
+            onConfirm = { selectedTypes ->
+                viewModel.resetPrograms(selectedTypes)
+                showResetMenu = false
+            }
+        )
     }
 
     Scaffold { padding ->
@@ -120,13 +138,26 @@ fun ProgramsScreen(
             }
 
             item {
-                Text(
-                    text = "Haftalık Akış",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Haftalık Akış",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    
+                    IconButton(onClick = { showResetMenu = true }) {
+                        Icon(
+                            Icons.Default.SettingsBackupRestore, 
+                            contentDescription = "Sıfırla",
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
             }
 
             val days = listOf("Pazartesi (PUSH)", "Salı (PULL)", "Çarşamba (LEGS)", "Cuma (UPPER)", "Cumartesi (LOWER)")
@@ -166,15 +197,80 @@ fun ProgramsScreen(
 }
 
 @Composable
+fun ResetProgramsDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (List<ProgramType>) -> Unit
+) {
+    val options = listOf(
+        Pair(ProgramType.MACHINE_WEIGHT, "Makine + Ağırlık"),
+        Pair(ProgramType.CALISTHENICS_WEIGHT, "Calisthenics + Ağırlık")
+    )
+    val selectedOptions = remember { mutableStateListOf<ProgramType>() }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Programları Sıfırla") },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth().selectableGroup()) {
+                Text("Sıfırlamak istediğiniz programları seçin:", style = MaterialTheme.typography.bodyMedium)
+                Spacer(Modifier.height(12.dp))
+                options.forEach { (type, label) ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .selectable(
+                                selected = selectedOptions.contains(type),
+                                onClick = {
+                                    if (selectedOptions.contains(type)) selectedOptions.remove(type)
+                                    else selectedOptions.add(type)
+                                },
+                                role = Role.Checkbox
+                            )
+                            .padding(horizontal = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = selectedOptions.contains(type),
+                            onCheckedChange = null
+                        )
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.padding(start = 12.dp)
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(selectedOptions.toList()) },
+                enabled = selectedOptions.isNotEmpty(),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+            ) {
+                Text("SEÇİLENLERİ SIFIRLA")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("İPTAL")
+            }
+        }
+    )
+}
+
+@Composable
 fun WorkoutInfoContent(
-    workout: Workout, 
+    workout: Workout,
     onResetToDefault: () -> Unit,
     navController: NavController,
     viewModel: ProgramsViewModel,
     dayIndex: Int,
     onCloseSheet: () -> Unit
 ) {
-    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -199,22 +295,32 @@ fun WorkoutInfoContent(
                 Text("Varsayılana Dön", style = MaterialTheme.typography.labelMedium)
             }
         }
-        
+
         Spacer(Modifier.height(16.dp))
-        
+
         LazyColumn(
-            modifier = Modifier.fillMaxWidth().heightIn(max = 400.dp),
+            modifier = Modifier.fillMaxWidth().heightIn(max = 450.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             itemsIndexed(workout.exercises) { _, exercise ->
-                val isWarmup = exercise.name.contains("Isınma", ignoreCase = true) || 
-                               exercise.reps.contains("Dakika") ||
-                               exercise.reps.contains("Saniye")
+                val isWarmup = exercise.name.contains("Isınma", ignoreCase = true) ||
+                        exercise.reps.contains("Dakika") ||
+                        exercise.reps.contains("Saniye")
 
                 Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            if (exercise.videoUrl.isNotEmpty()) {
+                                try {
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(exercise.videoUrl))
+                                    context.startActivity(intent)
+                                } catch (e: Exception) { }
+                            }
+                        },
                     colors = CardDefaults.cardColors(
                         containerColor = if (isWarmup) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                                        else MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
+                        else MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
                     ),
                     shape = RoundedCornerShape(12.dp)
                 ) {
@@ -222,6 +328,30 @@ fun WorkoutInfoContent(
                         modifier = Modifier.fillMaxWidth().padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        val videoId = YoutubeUtils.getYoutubeId(exercise.videoUrl)
+                        if (videoId.isNotEmpty()) {
+                            Box(contentAlignment = Alignment.Center) {
+                                AsyncImage(
+                                    model = ImageRequest.Builder(LocalContext.current)
+                                        .data(YoutubeUtils.getThumbnailUrl(videoId))
+                                        .crossfade(true)
+                                        .build(),
+                                    contentDescription = "Egzersiz Videosu",
+                                    modifier = Modifier
+                                        .size(60.dp)
+                                        .clip(RoundedCornerShape(8.dp)),
+                                    contentScale = ContentScale.Crop
+                                )
+                                Icon(
+                                    imageVector = Icons.Default.PlayCircle,
+                                    contentDescription = null,
+                                    tint = Color.White.copy(alpha = 0.8f),
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                            Spacer(Modifier.width(12.dp))
+                        }
+
                         Column(modifier = Modifier.weight(1f)) {
                             Text(text = exercise.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                             if (isWarmup) {
@@ -236,9 +366,9 @@ fun WorkoutInfoContent(
                 }
             }
         }
-        
+
         Spacer(Modifier.height(24.dp))
-        
+
         Button(
             onClick = {
                 viewModel.onEditRequested(dayIndex) { workoutId ->
@@ -333,8 +463,8 @@ fun DayWorkoutCard(dayName: String, isToday: Boolean, onInfoClick: () -> Unit, o
             .shadow(if (isToday) 8.dp else 0.dp, RoundedCornerShape(16.dp)),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (isToday) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f) 
-                            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            containerColor = if (isToday) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
         )
     ) {
         Row(
@@ -345,12 +475,26 @@ fun DayWorkoutCard(dayName: String, isToday: Boolean, onInfoClick: () -> Unit, o
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 val split = dayName.split(" (")
-                Text(
-                    text = split[0],
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = if (isToday) FontWeight.ExtraBold else FontWeight.Bold,
-                    color = if (isToday) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = split[0],
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = if (isToday) FontWeight.ExtraBold else FontWeight.Bold,
+                        color = if (isToday) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                    )
+                    IconButton(
+                        onClick = onInfoClick,
+                        modifier = Modifier.size(32.dp).padding(start = 4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = "Detaylar",
+                            tint = if (isToday) MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+                            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
                 if (split.size > 1) {
                     Text(
                         text = split[1].replace(")", ""),
@@ -359,28 +503,16 @@ fun DayWorkoutCard(dayName: String, isToday: Boolean, onInfoClick: () -> Unit, o
                     )
                 }
             }
-            
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onInfoClick) {
-                    Icon(
-                        imageVector = Icons.Default.Info,
-                        contentDescription = "Detaylar",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                    )
-                }
-                
+
+            Button(
+                onClick = onStartClick,
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.height(36.dp)
+            ) {
+                Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(4.dp))
-                
-                Button(
-                    onClick = onStartClick,
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.height(36.dp)
-                ) {
-                    Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("BAŞLAT", style = MaterialTheme.typography.labelLarge)
-                }
+                Text("BAŞLAT", style = MaterialTheme.typography.labelLarge)
             }
         }
     }
@@ -415,7 +547,7 @@ fun LastWorkoutSummaryCard(summary: WorkoutSummary?) {
                 )
             )
             if (summary != null) {
-                 val date = Instant.ofEpochMilli(summary.timestamp).atZone(ZoneId.systemDefault()).toLocalDate()
+                val date = Instant.ofEpochMilli(summary.timestamp).atZone(ZoneId.systemDefault()).toLocalDate()
                 val today = LocalDate.now()
                 val dateText = when (ChronoUnit.DAYS.between(date, today)) {
                     0L -> "Bugün"
@@ -443,9 +575,9 @@ fun LastWorkoutSummaryCard(summary: WorkoutSummary?) {
             } else {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(
-                        "Henüz bir antrenman tamamlamadın.", 
-                        style = MaterialTheme.typography.titleLarge, 
-                        textAlign = TextAlign.Center, 
+                        "Henüz bir antrenman tamamlamadın.",
+                        style = MaterialTheme.typography.titleLarge,
+                        textAlign = TextAlign.Center,
                         modifier = Modifier.padding(16.dp),
                         color = Color.White.copy(alpha = 0.8f)
                     )

@@ -33,7 +33,7 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = 1
-        versionName = "1.2"
+        versionName = "2.0"
 
         testInstrumentationRunner = "com.google.dagger.hilt.android.testing.HiltTestRunner"
 
@@ -150,6 +150,9 @@ dependencies {
 
     // Health Connect
     implementation(libs.androidx.health.connect.client)
+
+    // YouTube Player - NEW
+    implementation("com.pierfrancescosoffritti.androidyoutubeplayer:core:12.1.1")
 
     // Testing
     testImplementation(libs.junit)

@@ -18,24 +18,12 @@ class CustomWorkoutRepository @Inject constructor(
 
     suspend fun getWorkout(programType: String, dayIndex: Int): Workout? {
         val workoutEntity = customWorkoutDao.getWorkout(programType, dayIndex)
-        
-        // Eğer veritabanında yoksa, varsayılanlardan yükle ve kaydet (Sync)
         if (workoutEntity == null) {
             return syncDefaultWorkout(programType, dayIndex)
         }
-
-        return null // Flow ile takip edilecek, suspend olarak sadece varlık kontrolü için kullanılabilir.
+        return null
     }
 
-    fun getExercisesForWorkout(programType: String, dayIndex: Int): Flow<List<Exercise>> {
-        // Bu fonksiyon biraz karmaşık çünkü önce workoutId'yi bulmamız lazım.
-        // Ama biz bunu ViewModel'da daha kolay yönetebiliriz. 
-        // Şimdilik temel taşıma mantığını kuralım.
-        return customWorkoutDao.getExercisesForWorkout(0) // Geçici
-            .map { entities -> entities.map { it.toModel() } }
-    }
-
-    // Gerçek dinamik akış için workoutId üzerinden giden bir yapı
     fun getExercisesByWorkoutId(workoutId: Long): Flow<List<Exercise>> {
         return customWorkoutDao.getExercisesForWorkout(workoutId).map { entities ->
             entities.map { it.toModel() }
@@ -46,7 +34,6 @@ class CustomWorkoutRepository @Inject constructor(
         val existing = customWorkoutDao.getWorkout(programType, dayIndex)
         if (existing != null) return existing.id
 
-        // Yoksa varsayılanı kopyala
         val defaultList = if (programType == "MACHINE_WEIGHT") WorkoutData.machineWeightProgram else WorkoutData.calisthenicsProgram
         val defaultWorkout = defaultList.getOrNull(dayIndex) ?: return -1
 
@@ -66,9 +53,20 @@ class CustomWorkoutRepository @Inject constructor(
         val defaultWorkout = defaultList.getOrNull(dayIndex) ?: return
 
         val exerciseEntities = defaultWorkout.exercises.mapIndexed { index, ex ->
-            ex.toEntity(0, index) // workoutId resetWorkout içinde ayarlanacak
+            ex.toEntity(0, index)
         }
         customWorkoutDao.resetWorkout(programType, dayIndex, defaultWorkout.title, exerciseEntities)
+    }
+
+    // NEW: Reset all days for a program type
+    suspend fun resetAllToDefault(programType: String) {
+        val defaultList = if (programType == "MACHINE_WEIGHT") WorkoutData.machineWeightProgram else WorkoutData.calisthenicsProgram
+        defaultList.forEachIndexed { index, workout ->
+            val exerciseEntities = workout.exercises.mapIndexed { exIndex, ex ->
+                ex.toEntity(0, exIndex)
+            }
+            customWorkoutDao.resetWorkout(programType, index, workout.title, exerciseEntities)
+        }
     }
 
     private suspend fun syncDefaultWorkout(programType: String, dayIndex: Int): Workout? {
@@ -87,7 +85,6 @@ class CustomWorkoutRepository @Inject constructor(
         return defaultWorkout
     }
 
-    // Helper Extensions
     private fun Exercise.toEntity(workoutId: Long, order: Int) = CustomExerciseEntity(
         workoutId = workoutId,
         name = name,
@@ -97,6 +94,7 @@ class CustomWorkoutRepository @Inject constructor(
         restTimeSeconds = restTimeSeconds,
         description = description,
         imageUrl = imageUrl,
+        videoUrl = videoUrl,
         metValue = metValue,
         orderIndex = order
     )
@@ -109,6 +107,7 @@ class CustomWorkoutRepository @Inject constructor(
         restTimeSeconds = restTimeSeconds,
         description = description,
         imageUrl = imageUrl,
+        videoUrl = videoUrl,
         metValue = metValue
     )
 }

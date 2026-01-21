@@ -14,11 +14,12 @@ data class Exercise(
     val name: String,
     val searchKey: String = "",
     val sets: Int,
-    val reps: String, // e.g., "10-12" or "Maksimum"
+    val reps: String,
     val restTimeSeconds: Int,
-    val description: String, // How to do it, tips etc.
-    val imageUrl: String = "", // Varsayılan değer eklendi, artık zorunlu değil.
-    val metValue: Double = 3.0 // Metabolic Equivalent of Task - Default to a moderate value
+    val description: String,
+    val imageUrl: String = "",
+    val videoUrl: String = "", // NEW: YouTube linki için
+    val metValue: Double = 3.0
 ) : Parcelable
 
 

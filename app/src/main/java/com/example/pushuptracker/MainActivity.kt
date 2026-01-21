@@ -1,6 +1,7 @@
 package com.example.pushuptracker
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -8,6 +9,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -24,17 +26,25 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.pushuptracker.navigation.NavGraph
 import com.example.pushuptracker.navigation.Screen
+import com.example.pushuptracker.ui.programs.ProgramsViewModel
 import com.example.pushuptracker.ui.theme.PushupTrackerTheme
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+    
+    // Sesli komutları işlemek için Activity seviyesinde ViewModel'e erişim
+    private val programsViewModel: ProgramsViewModel by viewModels()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
+        
+        // İlk açılışta sesli komut kontrolü
+        handleIntent(intent)
+
         setContent {
             PushupTrackerTheme {
-                // BİLDİRİM İZNİ KONTROLÜ
                 val context = LocalContext.current
                 var hasNotificationPermission by remember {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -66,6 +76,26 @@ class MainActivity : ComponentActivity() {
 
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     MainScreen()
+                }
+            }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        // Uygulama açıkken gelen sesli komutları yakala
+        handleIntent(intent)
+    }
+
+    private fun handleIntent(intent: Intent?) {
+        intent?.let {
+            if (it.action == Intent.ACTION_VIEW) {
+                val programType = it.getStringExtra("programType")
+                val dayName = it.getStringExtra("dayName")
+                
+                // Eğer sesli komut verisi geldiyse ViewModel'e ilet
+                if (programType != null || dayName != null) {
+                    programsViewModel.handleVoiceCommand(programType, dayName)
                 }
             }
         }

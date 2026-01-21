@@ -7,7 +7,7 @@ import androidx.room.PrimaryKey
 data class CustomWorkoutEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val programType: String, // "MACHINE_WEIGHT" or "CALISTHENICS_WEIGHT"
-    val dayIndex: Int,       // 0 to 4 (Mon to Sat)
+    val dayIndex: Int,       // 0 to 4
     val title: String
 )
 
@@ -22,6 +22,7 @@ data class CustomExerciseEntity(
     val restTimeSeconds: Int,
     val description: String,
     val imageUrl: String = "",
+    val videoUrl: String = "", // NEW: YouTube linki
     val metValue: Double = 3.0,
-    val orderIndex: Int // Hareket sırasını korumak için
+    val orderIndex: Int
 )

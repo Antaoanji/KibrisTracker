@@ -19,13 +19,9 @@
     <string name="cancel">İptal</string>
     <string name="today_progress">Bugünkü İlerleme</string>
 
-    <!-- Dynamic Home Titles -->
+    <!-- Badge Titles and Descriptions (Total 50+) -->
 
-    <!-- Profile & Settings -->
-
-    <!-- Stats Screen -->
-
-    <!-- Badge Titles and Descriptions -->
+    <!-- STREAKS (SERİLER) -->
     <string name="badge_streak_3_title">Ateşleyici</string>
     <string name="badge_streak_3_desc">3 gün üst üste hedefe ulaş</string>
     <string name="badge_streak_7_title">Haftalık Seri</string>
@@ -34,6 +30,16 @@
     <string name="badge_streak_14_desc">14 gün üst üste hedefe ulaş</string>
     <string name="badge_streak_30_title">Bir Ay</string>
     <string name="badge_streak_30_desc">30 gün üst üste hedefe ulaş</string>
+    <string name="badge_streak_60_title">İki Aylık Güç</string>
+    <string name="badge_streak_60_desc">60 gün boyunca durmadan devam et</string>
+    <string name="badge_streak_90_title">Çelik Disiplin</string>
+    <string name="badge_streak_90_desc">90 günlük muazzam bir seri!</string>
+    <string name="badge_streak_180_title">Yarım Yıl Kralı</string>
+    <string name="badge_streak_180_desc">180 gün! Sen artık bir robotsun.</string>
+    <string name="badge_streak_365_title">Yılın Sporcusu</string>
+    <string name="badge_streak_365_desc">Tam 1 yıl boyunca hiç aksatmadın!</string>
+
+    <!-- PUSHUP VOLUME (ŞINAV HACMİ) -->
     <string name="badge_total_100_title">Yüzler Kulübü</string>
     <string name="badge_total_100_desc">Toplam 100 şınav yap</string>
     <string name="badge_total_500_title">Beş Yüz</string>
@@ -42,7 +48,77 @@
     <string name="badge_total_1000_desc">Toplam 1000 şınav yap</string>
     <string name="badge_total_5000_title">Elit</string>
     <string name="badge_total_5000_desc">Toplam 5000 şınav yap</string>
+    <string name="badge_total_10000_title">On Bin Dev</string>
+    <string name="badge_total_10000_desc">Toplam 10.000 şınav! Efsanesin.</string>
+    <string name="badge_total_25000_title">Şınav Makinesi</string>
+    <string name="badge_total_25000_desc">Toplam 25.000 şınav seviyesine ulaştın.</string>
+    <string name="badge_total_50000_title">Ölümsüz</string>
+    <string name="badge_total_50000_desc">50.000 şınav... Söze gerek yok.</string>
+
+    <!-- CALISTHENICS DISCIPLINE -->
+    <string name="badge_cali_1_title">İlk Barfiks</string>
+    <string name="badge_cali_1_desc">Calisthenics programında ilk antrenmanını bitir</string>
+    <string name="badge_cali_10_title">Sokak Savaşçısı</string>
+    <string name="badge_cali_10_desc">10 Calisthenics antrenmanı tamamla</string>
+    <string name="badge_cali_50_title">Yerçekimine Karşı</string>
+    <string name="badge_cali_50_desc">50 Calisthenics antrenmanı tamamla</string>
+    <string name="badge_cali_100_title">Cali Ustası</string>
+    <string name="badge_cali_100_desc">100 Calisthenics antrenmanı! Vücudun senin silahın.</string>
+    <string name="badge_cali_dips_title">Dips Kralı</string>
+    <string name="badge_cali_dips_desc">Toplamda 500 Dips tekrarına ulaş</string>
+    <string name="badge_cali_pullup_title">Barfiks Canavarı</string>
+    <string name="badge_cali_pullup_desc">Toplamda 250 Barfiks tekrarına ulaş</string>
+
+    <!-- MACHINE & WEIGHT DISCIPLINE -->
+    <string name="badge_weight_1_title">Ağırlıkların Efendisi</string>
+    <string name="badge_weight_1_desc">Makine + Ağırlık programında ilk adımını at</string>
+    <string name="badge_weight_10_title">Demir Yumruk</string>
+    <string name="badge_weight_10_desc">10 Makine antrenmanı tamamla</string>
+    <string name="badge_weight_50_title">Ağır Sıklet</string>
+    <string name="badge_weight_50_desc">50 Makine antrenmanı tamamla</string>
+    <string name="badge_weight_100_title">Salonun Sahibi</string>
+    <string name="badge_weight_100_desc">100 Makine antrenmanı! Plakalar sana yetmiyor.</string>
+    <string name="badge_weight_deadlift_title">Sırtı Çelik</string>
+    <string name="badge_weight_deadlift_desc">Toplamda 50 Deadlift seti bitir</string>
+    <string name="badge_weight_squat_title">Bacak Günü Müdavimi</string>
+    <string name="badge_weight_squat_desc">Toplamda 50 Squat seti bitir</string>
+
+    <!-- WATER HYDRATION (SU) -->
+    <string name="badge_water_1_title">İlk Yudum</string>
+    <string name="badge_water_1_desc">İlk kez günlük su hedefine ulaş</string>
+    <string name="badge_water_7_title">Hidrasyon Ustası</string>
+    <string name="badge_water_7_desc">7 gün üst üste su hedefine ulaş</string>
+    <string name="badge_water_30_title">Su Kaynağı</string>
+    <string name="badge_water_30_desc">30 gün boyunca su hedefini hiç aksatma</string>
+    <string name="badge_water_100_title">Okyanus Kalbi</string>
+    <string name="badge_water_100_desc">Toplamda 100 gün su hedefine ulaştın</string>
+
+    <!-- PERFORMANCE & TIME -->
     <string name="badge_single_50_title">Tek Seferde 50</string>
-    <string name="badge_single_50_desc">Tek seferde 50 şınav yap</string>
+    <string name="badge_single_50_desc">Tek bir şınav setinde 50 tekrar yap</string>
+    <string name="badge_single_100_title">Centurion</string>
+    <string name="badge_single_100_desc">Tek bir şınav setinde 100 tekrar yap!</string>
+    <string name="badge_early_bird_title">Erkenci Kuş</string>
+    <string name="badge_early_bird_desc">Antrenmanını sabah 07:00\'den önce bitir</string>
+    <string name="badge_night_owl_title">Gece Savaşçısı</string>
+    <string name="badge_night_owl_desc">Antrenmanını gece 23:00\'den sonra bitir</string>
+    <string name="badge_weekend_warrior_title">Hafta Sonu Savaşçısı</string>
+    <string name="badge_weekend_warrior_desc">Cumartesi ve Pazar günlerini boş geçme</string>
+
+    <!-- SPECIAL & HIDDEN -->
+    <string name="badge_full_week_title">Kusursuz Hafta</string>
+    <string name="badge_full_week_desc">Haftanın 7 günü de antrenman yap</string>
+    <string name="badge_consistency_title">İstikrar Makinesi</string>
+    <string name="badge_consistency_desc">Toplam 100 antrenmanı başarıyla bitir</string>
+    <string name="badge_variety_title">Her Telden</string>
+    <string name="badge_variety_desc">Hem Calisthenics hem Makine programını bitir</string>
+    <string name="badge_reborn_title">Yeniden Doğuş</string>
+    <string name="badge_reborn_desc">30 gün aradan sonra spora geri dön</string>
+    <string name="badge_level_up_title">Seviye Atladın!</string>
+    <string name="badge_level_up_desc">Toplamda 10 farklı başarıyı aç</string>
+    <string name="badge_badge_hunter_title">Koleksiyoncu</string>
+    <string name="badge_badge_hunter_desc">Toplamda 25 farklı başarıyı aç</string>
+    <string name="badge_legend_title">EFSANE</string>
+    <string name="badge_legend_desc">Toplamda 50 farklı başarıyı açarak efsane ol!</string>
 
 </resources>

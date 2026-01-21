@@ -10,6 +10,7 @@ import com.example.pushuptracker.audio.AudioCoach
 import com.example.pushuptracker.audio.WorkoutService
 import com.example.pushuptracker.data.repo.PushupRepo
 import com.example.pushuptracker.di.WorkoutHolder
+import com.example.pushuptracker.gamification.GamificationManager
 import com.example.pushuptracker.model.ActivityRecord
 import com.example.pushuptracker.model.Exercise
 import com.example.pushuptracker.model.WorkoutSummary
@@ -51,7 +52,8 @@ class WorkoutPlayerViewModel @Inject constructor(
     private val workoutHolder: WorkoutHolder,
     private val settingsManager: SettingsManager,
     private val audioCoach: AudioCoach,
-    private val pushupRepo: PushupRepo
+    private val pushupRepo: PushupRepo,
+    private val gamificationManager: GamificationManager
 ) : AndroidViewModel(application) {
 
     private val _workoutState = MutableStateFlow<WorkoutState>(WorkoutState.Loading)
@@ -60,6 +62,9 @@ class WorkoutPlayerViewModel @Inject constructor(
     private val _isSwapping = MutableStateFlow(false)
     val isSwapping = _isSwapping.asStateFlow()
 
+    // Expose new unlocked badges to UI
+    val newBadgeUnlocked = gamificationManager.newBadgeUnlocked
+
     private val generativeModel = GenerativeModel(
         modelName = "gemini-2.5-flash",
         apiKey = BuildConfig.GEMINI_API_KEY
@@ -67,6 +72,7 @@ class WorkoutPlayerViewModel @Inject constructor(
 
     private var timerJob: Job? = null
     private var exerciseTimerJob: Job? = null
+    private var stateUpdateJob: Job? = null
     private var startTimeMillis: Long = 0L
     private var sessionVolume: Double = 0.0
     private val sessionDifficulties = mutableListOf<String>()
@@ -134,6 +140,8 @@ class WorkoutPlayerViewModel @Inject constructor(
     fun onSetFinished(weightUsed: Double?, difficulty: String, note: String? = null, actualReps: Int? = null) = viewModelScope.launch {
         timerJob?.cancel()
         exerciseTimerJob?.cancel()
+        stateUpdateJob?.cancel()
+        
         val workout = workoutHolder.workout ?: return@launch
         val currentExercise = workout.exercises[workoutHolder.currentExerciseIndex]
         
@@ -187,6 +195,7 @@ class WorkoutPlayerViewModel @Inject constructor(
     fun moveToNextExercise() = viewModelScope.launch {
         timerJob?.cancel()
         exerciseTimerJob?.cancel()
+        stateUpdateJob?.cancel()
         val workout = workoutHolder.workout ?: return@launch
         
         if (workoutHolder.currentExerciseIndex < workout.exercises.size - 1) {
@@ -202,6 +211,7 @@ class WorkoutPlayerViewModel @Inject constructor(
     fun moveToPreviousExercise() = viewModelScope.launch {
         timerJob?.cancel()
         exerciseTimerJob?.cancel()
+        stateUpdateJob?.cancel()
         val workout = workoutHolder.workout ?: return@launch
         
         if (workoutHolder.currentExerciseIndex > 0) {
@@ -315,12 +325,15 @@ class WorkoutPlayerViewModel @Inject constructor(
                 workoutHolder.startNextDay()
                 settingsManager.incrementCurrentStreak()
             }
+            
+            gamificationManager.checkAndUnlockAchievements()
         }
     }
 
     private fun startRest(duration: Int, nextExercise: Exercise, nextSet: Int) {
         timerJob?.cancel()
         exerciseTimerJob?.cancel()
+        stateUpdateJob?.cancel()
         startService("Dinlenme Başladı", "$duration saniye kaldı")
         timerJob = viewModelScope.launch {
             var remainingTime = duration
@@ -330,7 +343,6 @@ class WorkoutPlayerViewModel @Inject constructor(
                 _workoutState.value = WorkoutState.Resting(nextExercise, nextSet, remainingTime, initialDuration)
                 updateNotification("Dinlenme: $remainingTime sn", "Sıradaki: ${nextExercise.name}")
                 
-                // FIXED: Start countdown slightly earlier to ensure '3' is audible
                 if (remainingTime <= 3 && !countdownStarted) {
                     countdownStarted = true
                     audioCoach.playCountdown()
@@ -369,6 +381,7 @@ class WorkoutPlayerViewModel @Inject constructor(
     }
 
     private suspend fun updateStateWithHistory(exercise: Exercise, setIndex: Int) {
+        stateUpdateJob?.cancel()
         val key = if (exercise.searchKey.isNotBlank()) exercise.searchKey else exercise.name
         val lastRecord = pushupRepo.getLastRecordForExercise(key)
 
@@ -394,12 +407,14 @@ class WorkoutPlayerViewModel @Inject constructor(
         
         val repsText = exercise.reps
         val initialTime = when {
-            repsText.contains("Dakika") -> {
+            repsText.contains("Tekrar", ignoreCase = true) -> null
+            repsText.contains("Dakika", ignoreCase = true) -> {
                 val mins = repsText.split(" ")[0].toIntOrNull() ?: 1
                 mins * 60
             }
-            repsText.contains("Saniye") -> {
-                repsText.split(" ")[0].toIntOrNull() ?: 30
+            repsText.contains("Saniye", ignoreCase = true) -> {
+                val secs = repsText.split(" ")[0].toIntOrNull() ?: 30
+                secs
             }
             else -> null
         }
@@ -418,11 +433,13 @@ class WorkoutPlayerViewModel @Inject constructor(
 
         if (initialTime != null) {
             startService("Hareket: ${exercise.name}", "Hazırlanılıyor...")
-            delay(2000)
-            val currentState = _workoutState.value
-            if (currentState is WorkoutState.InProgress) {
-                _workoutState.value = currentState.copy(isPreparing = false)
-                startExerciseTimer(initialTime)
+            stateUpdateJob = viewModelScope.launch {
+                delay(2000)
+                val currentState = _workoutState.value
+                if (currentState is WorkoutState.InProgress) {
+                    _workoutState.value = currentState.copy(isPreparing = false)
+                    startExerciseTimer(initialTime)
+                }
             }
         } else {
             startService("Hareket: ${exercise.name}", "$setIndex. Set yapılıyor")
@@ -441,7 +458,6 @@ class WorkoutPlayerViewModel @Inject constructor(
                     _workoutState.value = currentState.copy(remainingExerciseTime = time)
                     updateNotification("Hareket: ${currentState.exercise.name}", "$time sn kaldı")
                     
-                    // FIXED: Ensure '3' is audible by triggering slightly before 3.0s mark
                     if (time <= 3 && !countdownStarted) {
                         countdownStarted = true
                         audioCoach.playCountdown()
@@ -464,5 +480,6 @@ class WorkoutPlayerViewModel @Inject constructor(
         audioCoach.shutdown()
         timerJob?.cancel()
         exerciseTimerJob?.cancel()
+        stateUpdateJob?.cancel()
     }
 }

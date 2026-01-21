@@ -24,7 +24,12 @@
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
-        android:supportsRtl="true">
+        android:supportsRtl="true"
+        android:hardwareAccelerated="true">
+
+        <meta-data
+            android:name="android.app.shortcuts"
+            android:resource="@xml/shortcuts" />
 
         <service
             android:name=".audio.WorkoutService"
@@ -44,6 +49,14 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <!-- App Actions / Sesli Komut Intent Filtresi -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="pushuptracker" android:host="workout" />
+            </intent-filter>
         </activity>
 
         <activity-alias
@@ -55,7 +68,6 @@
             </intent-filter>
         </activity-alias>
 
-        <!-- Health Connect Privacy Policy Activity -->
         <activity
             android:name=".HealthConnectPrivacyActivity"
             android:exported="true">
@@ -64,7 +76,6 @@
             </intent-filter>
         </activity>
 
-        <!-- For Android 14+ intent filter -->
         <activity-alias
             android:name="ViewPermissionUsageActivity"
             android:exported="true"

@@ -12,6 +12,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -40,7 +41,10 @@ fun WorkoutEditorScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = { viewModel.addExercise() }) {
+            FloatingActionButton(
+                onClick = { viewModel.addExercise() },
+                modifier = Modifier.navigationBarsPadding() // Android 15 için navigasyon barı payı
+            ) {
                 Icon(Icons.Default.Add, contentDescription = "Egzersiz Ekle")
             }
         }
@@ -51,9 +55,13 @@ fun WorkoutEditorScreen(
                 .padding(padding)
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(vertical = 16.dp)
+            contentPadding = PaddingValues(top = 16.dp, bottom = 100.dp)
         ) {
-            itemsIndexed(exercises) { index, exercise ->
+            // OPTİMİZASYON: 'key' eklenerek listenin akıcılığı artırıldı
+            itemsIndexed(
+                items = exercises,
+                key = { _, exercise -> exercise.id } 
+            ) { index, exercise ->
                 ExerciseEditItem(
                     exercise = exercise,
                     onUpdate = { viewModel.updateExercise(it) },
@@ -62,7 +70,6 @@ fun WorkoutEditorScreen(
                     onMoveDown = { if (index < exercises.size - 1) viewModel.moveExercise(index, index + 1) }
                 )
             }
-            item { Spacer(modifier = Modifier.height(80.dp)) }
         }
     }
 }
@@ -75,7 +82,7 @@ fun ExerciseEditItem(
     onMoveUp: () -> Unit,
     onMoveDown: () -> Unit
 ) {
-    var showDialog by remember { mutableStateOf(false) }
+    val showDialog = remember { mutableStateOf(false) }
 
     Card(
         shape = RoundedCornerShape(12.dp),
@@ -99,19 +106,19 @@ fun ExerciseEditItem(
             Row {
                 IconButton(onClick = onMoveUp) { Icon(Icons.Default.ArrowUpward, contentDescription = null) }
                 IconButton(onClick = onMoveDown) { Icon(Icons.Default.ArrowDownward, contentDescription = null) }
-                IconButton(onClick = { showDialog = true }) { Icon(Icons.Default.Edit, contentDescription = null) }
+                IconButton(onClick = { showDialog.value = true }) { Icon(Icons.Default.Edit, contentDescription = null) }
                 IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) }
             }
         }
     }
 
-    if (showDialog) {
+    if (showDialog.value) {
         EditExerciseDialog(
             exercise = exercise,
-            onDismiss = { showDialog = false },
-            onConfirm = { 
-                onUpdate(it)
-                showDialog = false
+            onDismiss = { showDialog.value = false },
+            onConfirm = { updatedExercise ->
+                onUpdate(updatedExercise)
+                showDialog.value = false
             }
         )
     }
@@ -125,6 +132,7 @@ fun EditExerciseDialog(
 ) {
     var name by remember { mutableStateOf(exercise.name) }
     var description by remember { mutableStateOf(exercise.description) }
+    var videoUrl by remember { mutableStateOf(exercise.videoUrl) }
     var sets by remember { mutableStateOf(exercise.sets.toString()) }
     var reps by remember { mutableStateOf(exercise.reps) }
     var rest by remember { mutableStateOf(exercise.restTimeSeconds.toString()) }
@@ -133,7 +141,10 @@ fun EditExerciseDialog(
         onDismissRequest = onDismiss,
         title = { Text("Egzersizi Düzenle") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 OutlinedTextField(
                     value = name, 
                     onValueChange = { name = it }, 
@@ -145,8 +156,18 @@ fun EditExerciseDialog(
                     value = description, 
                     onValueChange = { description = it }, 
                     label = { Text("Açıklama / Nasıl Yapılır?") },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 100.dp),
-                    maxLines = 5
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp),
+                    maxLines = 4
+                )
+
+                OutlinedTextField(
+                    value = videoUrl, 
+                    onValueChange = { videoUrl = it }, 
+                    label = { Text("YouTube Video Linki") },
+                    placeholder = { Text("https://youtube.com/...") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    leadingIcon = { Icon(Icons.Default.PlayCircleFilled, contentDescription = null, tint = Color.Red) }
                 )
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -160,7 +181,7 @@ fun EditExerciseDialog(
                     OutlinedTextField(
                         value = reps, 
                         onValueChange = { reps = it }, 
-                        label = { Text("Tekrar/Süre") },
+                        label = { Text("Tekrar") },
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -179,6 +200,7 @@ fun EditExerciseDialog(
                 onConfirm(exercise.copy(
                     name = name,
                     description = description,
+                    videoUrl = videoUrl,
                     sets = sets.toIntOrNull() ?: exercise.sets,
                     reps = reps,
                     restTimeSeconds = rest.toIntOrNull() ?: exercise.restTimeSeconds

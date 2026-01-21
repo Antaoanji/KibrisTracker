@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 import javax.inject.Inject
 
 enum class ProgramType {
@@ -32,7 +33,6 @@ class ProgramsViewModel @Inject constructor(
     private val _selectedProgram = MutableStateFlow(ProgramType.MACHINE_WEIGHT)
     val selectedProgram = _selectedProgram.asStateFlow()
 
-    // Antrenman detaylarını UI'da göstermek için State
     private val _workoutDetails = MutableStateFlow<Workout?>(null)
     val workoutDetails = _workoutDetails.asStateFlow()
 
@@ -59,7 +59,42 @@ class ProgramsViewModel @Inject constructor(
         _selectedProgram.value = type
     }
 
-    // Info butonuna tıklandığında veritabanından güncel hareketleri getirir
+    fun handleVoiceCommand(programType: String?, dayName: String?) {
+        viewModelScope.launch {
+            val type = when {
+                programType?.contains("calisthenics", ignoreCase = true) == true || 
+                programType?.contains("kendi", ignoreCase = true) == true -> ProgramType.CALISTHENICS_WEIGHT
+                else -> ProgramType.MACHINE_WEIGHT
+            }
+            _selectedProgram.value = type
+
+            val dayIndex = when {
+                dayName?.contains("pazartesi", ignoreCase = true) == true -> 0
+                dayName?.contains("salı", ignoreCase = true) == true -> 1
+                dayName?.contains("çarşamba", ignoreCase = true) == true -> 2
+                dayName?.contains("cuma", ignoreCase = true) == true -> 3
+                dayName?.contains("cumartesi", ignoreCase = true) == true -> 4
+                dayName?.contains("bugün", ignoreCase = true) == true -> getTodayIndex()
+                else -> getTodayIndex()
+            }
+
+            if (dayIndex != -1) {
+                onDaySelected(dayIndex)
+            }
+        }
+    }
+
+    private fun getTodayIndex(): Int {
+        return when (LocalDate.now().dayOfWeek) {
+            java.time.DayOfWeek.MONDAY -> 0
+            java.time.DayOfWeek.TUESDAY -> 1
+            java.time.DayOfWeek.WEDNESDAY -> 2
+            java.time.DayOfWeek.FRIDAY -> 3
+            java.time.DayOfWeek.SATURDAY -> 4
+            else -> -1
+        }
+    }
+
     fun loadWorkoutDetails(dayIndex: Int) {
         viewModelScope.launch {
             val programTypeStr = _selectedProgram.value.name
@@ -72,7 +107,6 @@ class ProgramsViewModel @Inject constructor(
         }
     }
 
-    // Düzenleme talebi geldiğinde ID'yi bulup navigasyonu tetiklemek için yardımcı fonksiyon
     fun onEditRequested(dayIndex: Int, onIdFound: (Long) -> Unit) {
         viewModelScope.launch {
             val workoutId = customWorkoutRepository.ensureWorkoutExists(_selectedProgram.value.name, dayIndex)
@@ -85,10 +119,8 @@ class ProgramsViewModel @Inject constructor(
             _eventState.update { it.copy(isLoading = true) }
             val programTypeStr = _selectedProgram.value.name
             
-            // Veritabanında bu günün kaydı var mı emin ol, yoksa kopyala (Sync)
             val workoutId = customWorkoutRepository.ensureWorkoutExists(programTypeStr, dayIndex)
             
-            // Güncel egzersiz listesini al
             customWorkoutRepository.getExercisesByWorkoutId(workoutId).collect { exercises ->
                 val title = if (_selectedProgram.value == ProgramType.MACHINE_WEIGHT) "Makine" else "Calisthenics"
                 val workout = Workout(title = "$title - Gün ${dayIndex + 1}", exercises = exercises)
@@ -105,7 +137,18 @@ class ProgramsViewModel @Inject constructor(
     fun resetProgramToDefault(dayIndex: Int) {
         viewModelScope.launch {
             customWorkoutRepository.resetToDefault(_selectedProgram.value.name, dayIndex)
-            loadWorkoutDetails(dayIndex) // UI'ı güncelle
+            loadWorkoutDetails(dayIndex)
+        }
+    }
+
+    // UPDATED: Reset specific program types
+    fun resetPrograms(types: List<ProgramType>) {
+        viewModelScope.launch {
+            _eventState.update { it.copy(isLoading = true) }
+            types.forEach { type ->
+                customWorkoutRepository.resetAllToDefault(type.name)
+            }
+            _eventState.update { it.copy(isLoading = false) }
         }
     }
 

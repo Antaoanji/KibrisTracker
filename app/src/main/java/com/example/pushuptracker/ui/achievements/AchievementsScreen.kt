@@ -1,39 +1,27 @@
 package com.example.pushuptracker.ui.achievements
 
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.graphics.ColorMatrix
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.pushuptracker.model.Badge
@@ -42,10 +30,24 @@ import com.example.pushuptracker.model.Badge
 fun AchievementsScreen(viewModel: AchievementsViewModel = hiltViewModel()) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    Scaffold {
-        padding ->
+    Scaffold(
+        topBar = {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    "Başarımlar",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    "Toplam ${uiState.badges.count { it.progress >= 1f }} / ${uiState.badges.size} başarı açıldı",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    ) { padding ->
         LazyVerticalGrid(
-            columns = GridCells.Fixed(2), // 2 badges per row for more space
+            columns = GridCells.Fixed(2),
             modifier = Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -63,49 +65,69 @@ fun AchievementsScreen(viewModel: AchievementsViewModel = hiltViewModel()) {
 
 @Composable
 fun BadgeItem(badge: Badge, isUnlocked: Boolean, modifier: Modifier = Modifier) {
-    val colorFilter = if (isUnlocked) null else ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) })
-    val alpha = if (isUnlocked) 1f else 0.6f
+    val containerColor = if (isUnlocked) badge.color.copy(alpha = 0.1f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
 
     Card(
-        modifier = modifier.aspectRatio(0.8f),
-        elevation = CardDefaults.cardElevation(defaultElevation = if (isUnlocked) 4.dp else 1.dp)
+        modifier = modifier.aspectRatio(0.85f),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = containerColor),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isUnlocked) 4.dp else 0.dp)
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(12.dp)
-                .alpha(alpha),
+            modifier = Modifier.fillMaxSize().padding(12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Image(
-                painter = painterResource(id = badge.iconRes),
-                contentDescription = stringResource(id = badge.title),
+            Box(
+                contentAlignment = Alignment.Center,
                 modifier = Modifier
-                    .fillMaxWidth(0.5f)
-                    .aspectRatio(1f)
-                    .clip(MaterialTheme.shapes.medium),
-                contentScale = ContentScale.Fit,
-                colorFilter = colorFilter
-            )
-            Spacer(modifier = Modifier.height(8.dp))
+                    .size(60.dp)
+                    .clip(CircleShape)
+                    .background(if (isUnlocked) badge.color.copy(alpha = 0.2f) else Color.Gray.copy(alpha = 0.1f))
+            ) {
+                Icon(
+                    imageVector = if (isUnlocked) badge.icon else Icons.Default.Lock,
+                    contentDescription = null,
+                    tint = if (isUnlocked) badge.color else Color.Gray,
+                    modifier = Modifier.size(32.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
             Text(
                 text = stringResource(id = badge.title),
-                style = MaterialTheme.typography.bodyLarge,
+                style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
-            Spacer(modifier = Modifier.height(4.dp))
+
             Text(
                 text = stringResource(id = badge.descriptionRes),
-                style = MaterialTheme.typography.bodySmall,
-                textAlign = TextAlign.Center
+                style = MaterialTheme.typography.labelSmall,
+                textAlign = TextAlign.Center,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.heightIn(min = 32.dp),
+                lineHeight = 14.sp
             )
+
             if (!isUnlocked) {
                 Spacer(modifier = Modifier.height(8.dp))
                 LinearProgressIndicator(
                     progress = { badge.progress },
-                    modifier = Modifier.fillMaxWidth(0.8f).height(6.dp).clip(RoundedCornerShape(3.dp))
+                    modifier = Modifier.fillMaxWidth(0.7f).height(4.dp).clip(RoundedCornerShape(2.dp)),
+                    color = Color.Gray.copy(alpha = 0.5f),
+                    trackColor = Color.Gray.copy(alpha = 0.1f)
+                )
+            } else {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    "TAMAMLANDI",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = badge.color,
+                    fontWeight = FontWeight.ExtraBold
                 )
             }
         }

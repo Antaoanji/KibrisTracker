@@ -24,6 +24,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -90,9 +91,13 @@ fun HomeScreen(viewModel: HomeViewModel = hiltViewModel()) {
                     .padding(padding)
                     .padding(horizontal = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                horizontalAlignment = Alignment.CenterHorizontally,
+                contentPadding = PaddingValues(bottom = 16.dp)
             ) {
-                items(Activities.allActivities) { activity ->
+                items(
+                    items = Activities.allActivities,
+                    key = { it.id } // OPTİMİZASYON: Key eklendi
+                ) { activity ->
                     ActivityCard(
                         viewModel = viewModel, 
                         activity = activity, 
@@ -100,7 +105,6 @@ fun HomeScreen(viewModel: HomeViewModel = hiltViewModel()) {
                         onAutoTrackClick = { if(activity.id == "pushups") showAutoTracker = true }
                     )
                 }
-                item { Spacer(modifier = Modifier.height(16.dp)) }
             }
 
             // GÜNCELLEME DİYALOĞU
@@ -179,7 +183,6 @@ fun AutoPushupTrackerDialog(
 ) {
     var count by remember { mutableStateOf(0) }
     
-    // Sensör dinlemeyi başlat
     DisposableEffect(Unit) {
         viewModel.startAutoPushupCounting { newCount ->
             count = newCount
@@ -286,7 +289,13 @@ fun StreakIcon(streak: Streak) {
             LottieAnimation(
                 composition = composition,
                 progress = { animatable.progress },
-                modifier = Modifier.size(38.dp).alpha(alpha).scale(scale)
+                modifier = Modifier
+                    .size(38.dp)
+                    .graphicsLayer { // OPTİMİZASYON: GPU tabanlı animasyon
+                        this.alpha = alpha
+                        this.scaleX = scale
+                        this.scaleY = scale
+                    }
             )
             if (streak.count > 0) {
                 Box(

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <capability android:name="actions.intent.START_EXERCISE">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.example.pushuptracker"
+            android:targetClass="com.example.pushuptracker.MainActivity">
+            <!-- Program Tipi: Makine veya Calisthenics -->
+            <parameter
+                android:name="exercise.name"
+                android:key="programType"/>
+            <!-- Gün Bilgisi: Pazartesi, Salı vb. -->
+            <parameter
+                android:name="exercise.discipline"
+                android:key="dayName"/>
+        </intent>
+    </capability>
+</shortcuts>

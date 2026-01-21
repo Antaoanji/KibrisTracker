@@ -1,5 +1,6 @@
 package com.example.pushuptracker.ui.programs
 
+import androidx.compose.animation.*
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -7,7 +8,10 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -16,6 +20,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -26,6 +31,7 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
@@ -36,21 +42,36 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.example.pushuptracker.model.Badge
 import com.example.pushuptracker.model.Exercise
 import com.example.pushuptracker.navigation.Screen
+import com.example.pushuptracker.util.YoutubeUtils
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun WorkoutPlayerScreen(navController: NavController, viewModel: WorkoutPlayerViewModel = hiltViewModel()) {
+fun WorkoutPlayerScreen(
+    navController: NavController, 
+    viewModel: WorkoutPlayerViewModel = hiltViewModel()
+) {
     val state by viewModel.workoutState.collectAsStateWithLifecycle()
     val isSwapping by viewModel.isSwapping.collectAsStateWithLifecycle()
-    val sheetState = rememberModalBottomSheetState()
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
     var showBottomSheet by remember { mutableStateOf(false) }
     var selectedExerciseForInfo by remember { mutableStateOf<Exercise?>(null) }
+
+    // --- CELEBRATION STATE ---
+    var activeBadge by remember { mutableStateOf<Badge?>(null) }
+    
+    LaunchedEffect(Unit) {
+        viewModel.newBadgeUnlocked.collect { badge ->
+            activeBadge = badge
+            delay(5000)
+            activeBadge = null
+        }
+    }
 
     val currentView = LocalView.current
     DisposableEffect(Unit) {
@@ -81,7 +102,7 @@ fun WorkoutPlayerScreen(navController: NavController, viewModel: WorkoutPlayerVi
                         text = titleText,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.titleMedium // Daha küçük font ile sığmasını sağla
+                        style = MaterialTheme.typography.titleMedium
                     )
                 },
                 navigationIcon = {
@@ -90,22 +111,22 @@ fun WorkoutPlayerScreen(navController: NavController, viewModel: WorkoutPlayerVi
                     }
                 },
                 actions = {
-                     if (state is WorkoutState.InProgress) {
-                         Row(verticalAlignment = Alignment.CenterVertically) {
-                             IconButton(onClick = { viewModel.moveToPreviousExercise() }) {
-                                 Icon(Icons.Default.SkipPrevious, contentDescription = "Önceki")
-                             }
-                             IconButton(onClick = { viewModel.moveToNextExercise() }) {
-                                 Icon(Icons.Default.SkipNext, contentDescription = "Sonraki")
-                             }
-                             IconButton(onClick = { 
-                                 selectedExerciseForInfo = (state as WorkoutState.InProgress).exercise
-                                 showBottomSheet = true 
+                    if (state is WorkoutState.InProgress) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(onClick = { viewModel.moveToPreviousExercise() }) {
+                                Icon(Icons.Default.SkipPrevious, contentDescription = "Önceki")
+                            }
+                            IconButton(onClick = { viewModel.moveToNextExercise() }) {
+                                Icon(Icons.Default.SkipNext, contentDescription = "Sonraki")
+                            }
+                            IconButton(onClick = {
+                                selectedExerciseForInfo = (state as WorkoutState.InProgress).exercise
+                                showBottomSheet = true
                             }) {
                                 Icon(Icons.Default.Info, contentDescription = "Bilgi")
                             }
-                         }
-                     }
+                        }
+                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color.Black.copy(alpha = 0.4f),
@@ -144,8 +165,8 @@ fun WorkoutPlayerScreen(navController: NavController, viewModel: WorkoutPlayerVi
                         onSwap = { viewModel.swapCurrentExercise() },
                         onRestartTimer = { viewModel.restartExerciseTimer() },
                         onToggleTimer = { viewModel.toggleExerciseTimer() },
-                        onSetFinished = { weight, difficulty, note, reps -> 
-                            viewModel.onSetFinished(weight, difficulty, note, reps) 
+                        onSetFinished = { weight, difficulty, note, reps ->
+                            viewModel.onSetFinished(weight, difficulty, note, reps)
                         }
                     )
                     is WorkoutState.Resting -> RestScreen(
@@ -159,34 +180,115 @@ fun WorkoutPlayerScreen(navController: NavController, viewModel: WorkoutPlayerVi
                         totalTimeMinutes = currentState.totalTimeMinutes,
                         totalVolume = currentState.totalVolume,
                         dominantDifficulty = currentState.dominantDifficulty,
-                        onNavigateToPrograms = { 
+                        onNavigateToPrograms = {
                             navController.navigate(Screen.Programs.route) {
                                 popUpTo(Screen.Programs.route) { inclusive = true }
                             }
                         },
-                        onNavigateToHome = { 
+                        onNavigateToHome = {
                             navController.navigate(Screen.Home.route) {
                                 popUpTo(Screen.Home.route) { inclusive = true }
                             }
-                         }
+                        }
                     )
+                }
+            }
+
+            AnimatedVisibility(
+                visible = activeBadge != null,
+                enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
+                exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(),
+                modifier = Modifier.align(Alignment.TopCenter).padding(top = 80.dp).padding(horizontal = 16.dp)
+            ) {
+                activeBadge?.let { badge ->
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                        shape = RoundedCornerShape(16.dp),
+                        elevation = CardDefaults.cardElevation(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.EmojiEvents,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(40.dp)
+                            )
+                            Spacer(Modifier.width(16.dp))
+                            Column {
+                                Text(
+                                    "Başarım Kazandın!",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Text(
+                                    stringResource(badge.title),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    stringResource(badge.descriptionRes),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
 
-        if (showBottomSheet) {
+        if (showBottomSheet && selectedExerciseForInfo != null) {
             ModalBottomSheet(
                 onDismissRequest = { showBottomSheet = false },
-                sheetState = sheetState
+                sheetState = sheetState,
+                containerColor = MaterialTheme.colorScheme.surface
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(selectedExerciseForInfo?.name ?: "", style = MaterialTheme.typography.headlineSmall)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    Text(
+                        text = selectedExerciseForInfo?.name ?: "",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    
                     Spacer(Modifier.height(16.dp))
-                    Text(selectedExerciseForInfo?.description ?: "Açıklama bulunamadı.", style = MaterialTheme.typography.bodyLarge)
+
+                    val videoId = YoutubeUtils.getYoutubeId(selectedExerciseForInfo?.videoUrl)
+                    if (videoId.isNotEmpty()) {
+                        YoutubePlayerComposable(videoId = videoId)
+                        Spacer(Modifier.height(16.dp))
+                    }
+
+                    Text(
+                        text = "Nasıl Yapılır?",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = selectedExerciseForInfo?.description ?: "Açıklama bulunamadı.",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                    
                     Spacer(Modifier.height(32.dp))
-                    Button(onClick = { scope.launch { sheetState.hide() }.invokeOnCompletion { showBottomSheet = false } }) {
+                    
+                    Button(
+                        onClick = { scope.launch { sheetState.hide() }.invokeOnCompletion { showBottomSheet = false } },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
                         Text("Anladım")
                     }
+                    Spacer(Modifier.height(16.dp))
                 }
             }
         }
@@ -208,12 +310,12 @@ fun ExerciseScreen(
     onSetFinished: (weightUsed: Double?, difficulty: String, note: String?, actualReps: Int?) -> Unit
 ) {
     val scope = rememberCoroutineScope()
-    var buttonClicked by remember(exercise.searchKey, set) { mutableStateOf(false) }
-    
+    var buttonClicked by remember(exercise.name, set) { mutableStateOf(false) }
+
     val isWarmup = remember(exercise.name) {
         val warmupKeywords = listOf(
-            "Isınma", "Çevirme", "Döndürme", "Jumping", "Kedi-Deve", 
-            "Scapular", "Duvarda", "Leg Swing", "Pull Apart", 
+            "Isınma", "Çevirme", "Döndürme", "Jumping", "Kedi-Deve",
+            "Scapular", "Duvarda", "Leg Swing", "Pull Apart",
             "Bodyweight Squat", "Melek", "Stretch"
         )
         warmupKeywords.any { exercise.name.contains(it, ignoreCase = true) } || remainingTime != null
@@ -226,9 +328,9 @@ fun ExerciseScreen(
         historyHint?.substringAfter("(", "")?.substringBefore(")") ?: ""
     }
 
-    var weightInput by remember(exercise.searchKey) { mutableStateOf(initialWeight) }
-    var noteInput by remember(exercise.searchKey) { mutableStateOf(initialNote) }
-    var repsInput by remember(exercise.searchKey, set) { mutableStateOf("") }
+    var weightInput by remember(exercise.name) { mutableStateOf(initialWeight) }
+    var noteInput by remember(exercise.name) { mutableStateOf(initialNote) }
+    var repsInput by remember(exercise.name, set) { mutableStateOf("") }
 
     val initialProgress = remember(exercise.sets, set) { if (exercise.sets > 0) (set - 1).toFloat() / exercise.sets.toFloat() else 0f }
     val finalProgress = remember(exercise.sets, set) { if (exercise.sets > 0) set.toFloat() / exercise.sets.toFloat() else 0f }
@@ -300,13 +402,13 @@ fun ExerciseScreen(
                         )
                     )
                     Text(
-                        text = if (isTimerPaused) "Duraklatıldı" else "Saniye Kaldı", 
-                        style = MaterialTheme.typography.titleMedium, 
+                        text = if (isTimerPaused) "Duraklatıldı" else "Saniye Kaldı",
+                        style = MaterialTheme.typography.titleMedium,
                         color = Color.White.copy(alpha = 0.8f)
                     )
-                    
+
                     Spacer(Modifier.height(16.dp))
-                    
+
                     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                         IconButton(onClick = onRestartTimer) {
                             Icon(Icons.Default.Refresh, contentDescription = "Başa Sar", tint = Color.White.copy(alpha = 0.7f))
@@ -342,7 +444,7 @@ fun ExerciseScreen(
                 }
             }
         }
-        
+
         Spacer(Modifier.weight(1f))
 
         if (!isWarmup && (historyHint != null || coachSuggestion != null)) {
@@ -372,7 +474,7 @@ fun ExerciseScreen(
                             unfocusedTextColor = Color.White
                         )
                     )
-                    
+
                     if (exercise.reps.contains("MAX", ignoreCase = true)) {
                         OutlinedTextField(
                             value = repsInput,
@@ -389,7 +491,7 @@ fun ExerciseScreen(
                         )
                     }
                 }
-                
+
                 OutlinedTextField(
                     value = noteInput,
                     onValueChange = { noteInput = it },
@@ -404,7 +506,7 @@ fun ExerciseScreen(
                 )
             }
         }
-        
+
         Spacer(Modifier.height(16.dp))
 
         if (isWarmup) {
@@ -476,12 +578,12 @@ fun RestScreen(restTime: Int, initialDuration: Int, nextExerciseName: String, on
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center, modifier = Modifier.padding(16.dp)) {
         Text("Dinlen", style = MaterialTheme.typography.displayMedium.copy(color = Color.White, shadow = Shadow(Color.Black, blurRadius = 8f)))
         Spacer(Modifier.height(16.dp))
-        
+
         Box(contentAlignment = Alignment.Center, modifier = Modifier.size(280.dp)) {
             CircularProgressIndicator(
-                progress = { progress }, 
-                modifier = Modifier.fillMaxSize(), 
-                strokeWidth = 20.dp, 
+                progress = { progress },
+                modifier = Modifier.fillMaxSize(),
+                strokeWidth = 20.dp,
                 color = MaterialTheme.colorScheme.primary,
                 trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
             )
@@ -489,9 +591,9 @@ fun RestScreen(restTime: Int, initialDuration: Int, nextExerciseName: String, on
         }
         Spacer(Modifier.height(16.dp))
         Text(
-            text = "Sıradaki: $nextExerciseName", 
+            text = "Sıradaki: $nextExerciseName",
             style = MaterialTheme.typography.headlineSmall.copy(
-                color = Color.White, 
+                color = Color.White,
                 shadow = Shadow(Color.Black, blurRadius = 8f)
             )
         )
@@ -509,7 +611,7 @@ fun RestScreen(restTime: Int, initialDuration: Int, nextExerciseName: String, on
 
 @Composable
 fun FinishedScreen(
-    totalTimeMinutes: Int, 
+    totalTimeMinutes: Int,
     totalVolume: Double,
     dominantDifficulty: String,
     onNavigateToPrograms: () -> Unit,
@@ -536,7 +638,7 @@ fun FinishedScreen(
         }
 
         Spacer(modifier = Modifier.height(48.dp))
-        
+
         Button(onClick = onNavigateToPrograms, modifier = Modifier.fillMaxWidth().height(52.dp)) {
             Text("Programa Dön", style = MaterialTheme.typography.titleLarge)
         }
