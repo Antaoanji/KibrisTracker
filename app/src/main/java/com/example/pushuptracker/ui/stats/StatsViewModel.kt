@@ -1,5 +1,6 @@
 package com.example.pushuptracker.ui.stats
 
+import android.util.Log
 import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -8,13 +9,7 @@ import com.example.pushuptracker.data.repo.PushupRepo
 import com.example.pushuptracker.model.ActivityRecord
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
@@ -33,7 +28,7 @@ data class ChartUiState(
 data class OverallStats(
     val totalPushups: Int = 0,
     val totalWater: Int = 0,
-    val totalCalories: Int = 0, // Added for UI
+    val totalCalories: Int = 0,
     val currentStreak: Int = 0
 )
 
@@ -77,17 +72,26 @@ class StatsViewModel @Inject constructor(
 
     fun checkHealthPermissions() {
         viewModelScope.launch {
-            _hasHealthPermissions.value = healthConnectManager.hasAllPermissions()
-            if (_hasHealthPermissions.value) {
-                loadHealthData()
+            try {
+                _hasHealthPermissions.value = healthConnectManager.hasAllPermissions()
+                if (_hasHealthPermissions.value) {
+                    loadHealthData()
+                }
+            } catch (e: Exception) {
+                Log.e("StatsViewModel", "Health Connect permission check failed", e)
+                _hasHealthPermissions.value = false
             }
         }
     }
 
     fun loadHealthData() {
         viewModelScope.launch {
-            _healthSessions.value = healthConnectManager.readExerciseSessions()
-            _healthCalories.value = healthConnectManager.readTotalCalories().toInt()
+            try {
+                _healthSessions.value = healthConnectManager.readExerciseSessions()
+                _healthCalories.value = healthConnectManager.readTotalCalories().toInt()
+            } catch (e: Exception) {
+                Log.e("StatsViewModel", "Failed to load health data", e)
+            }
         }
     }
 
@@ -112,11 +116,12 @@ class StatsViewModel @Inject constructor(
         val totalPushups = records.filter { it.type == "pushup" }.sumOf { it.value }.toInt()
         val totalWater = records.filter { it.type == "water" }.sumOf { it.value }.toInt()
         
-        // Pushup calories calculation + Health Connect calories
         val pushupCalories = totalPushups * 0.5 
         
         val pushupDates = records.filter { it.type == "pushup" && it.value > 0 }
-            .map { LocalDate.parse(it.date) }.distinct().sortedDescending()
+            .mapNotNull { 
+                try { LocalDate.parse(it.date) } catch (e: Exception) { null }
+            }.distinct().sortedDescending()
 
         var currentStreak = 0
         if (pushupDates.isNotEmpty()) {
@@ -157,13 +162,17 @@ class StatsViewModel @Inject constructor(
         val startOfLastWeek = startOfThisWeek.minusWeeks(1)
 
         val thisWeekValue = records.filter {
-            val date = LocalDate.parse(it.date)
-            !date.isBefore(startOfThisWeek) && date.isBefore(startOfThisWeek.plusWeeks(1))
+            try {
+                val date = LocalDate.parse(it.date)
+                !date.isBefore(startOfThisWeek) && date.isBefore(startOfThisWeek.plusWeeks(1))
+            } catch (e: Exception) { false }
         }.sumOf { it.value }.toInt()
 
         val lastWeekValue = records.filter {
-            val date = LocalDate.parse(it.date)
-            !date.isBefore(startOfLastWeek) && date.isBefore(startOfThisWeek)
+            try {
+                val date = LocalDate.parse(it.date)
+                !date.isBefore(startOfLastWeek) && date.isBefore(startOfThisWeek)
+            } catch (e: Exception) { false }
         }.sumOf { it.value }.toInt()
 
         ChangeStats(previous = lastWeekValue, current = thisWeekValue)
@@ -177,13 +186,17 @@ class StatsViewModel @Inject constructor(
         val startOfLastMonth = startOfThisMonth.minusMonths(1)
 
         val thisMonthValue = records.filter {
-            val date = LocalDate.parse(it.date)
-            !date.isBefore(startOfThisMonth) && date.isBefore(startOfThisMonth.plusMonths(1))
+            try {
+                val date = LocalDate.parse(it.date)
+                !date.isBefore(startOfThisMonth) && date.isBefore(startOfThisMonth.plusMonths(1))
+            } catch (e: Exception) { false }
         }.sumOf { it.value }.toInt()
 
         val lastMonthValue = records.filter {
-            val date = LocalDate.parse(it.date)
-            !date.isBefore(startOfLastMonth) && date.isBefore(startOfThisMonth)
+            try {
+                val date = LocalDate.parse(it.date)
+                !date.isBefore(startOfLastMonth) && date.isBefore(startOfThisMonth)
+            } catch (e: Exception) { false }
         }.sumOf { it.value }.toInt()
 
         ChangeStats(previous = lastMonthValue, current = thisMonthValue)

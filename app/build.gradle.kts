@@ -33,7 +33,7 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = 1
-        versionName = "1.0"
+        versionName = "1.2"
 
         testInstrumentationRunner = "com.google.dagger.hilt.android.testing.HiltTestRunner"
 
@@ -48,10 +48,22 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = true
+            isShrinkResources = true 
+            
+            // ÇÖZÜM: Test amaçlı APK oluşturabilmek için debug imzasını kullan
+            signingConfig = signingConfigs.getByName("debug")
+            
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            ndk {
+                debugSymbolLevel = "none"
+            }
+        }
+        debug {
+            isMinifyEnabled = false
+            isShrinkResources = false
         }
     }
     compileOptions {
@@ -68,9 +80,11 @@ android {
         buildConfig = true
     }
     packaging {
-        resources.excludes.add("/META-INF/{AL2.0,LGPL2.1}")
-        resources.excludes.add("META-INF/INDEX.LIST")
-        resources.excludes.add("META-INF/DEPENDENCIES")
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes += "META-INF/INDEX.LIST"
+            excludes += "META-INF/DEPENDENCIES"
+        }
     }
 }
 
@@ -94,8 +108,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.coil.compose)
     implementation(libs.coil.gif)
-    implementation(libs.androidx.ui.text.google.fonts) // Added Google Fonts dependency
-    implementation("androidx.core:core-splashscreen:1.2.0") // Added splash screen dependency
+    implementation(libs.androidx.ui.text.google.fonts)
+    implementation("androidx.core:core-splashscreen:1.2.0")
 
     // Navigation
     implementation(libs.androidx.navigation.compose)
@@ -134,7 +148,7 @@ dependencies {
     // Lottie
     implementation(libs.lottie.compose)
 
-    // Health Connect - Updated to stable 1.1.0
+    // Health Connect
     implementation(libs.androidx.health.connect.client)
 
     // Testing

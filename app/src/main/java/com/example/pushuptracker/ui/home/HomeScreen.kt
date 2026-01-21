@@ -13,6 +13,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.TouchApp
+import androidx.compose.material.icons.filled.Update
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -43,6 +44,8 @@ import com.example.pushuptracker.model.TrackableActivity
 @Composable
 fun HomeScreen(viewModel: HomeViewModel = hiltViewModel()) {
     val uiState by viewModel.homeScreenState.collectAsStateWithLifecycle()
+    val updateInfo by viewModel.updateInfo.collectAsStateWithLifecycle()
+    
     var showAddDialog by remember { mutableStateOf<TrackableActivity?>(null) }
     var showAutoTracker by remember { mutableStateOf(false) }
     var showCelebration by remember { mutableStateOf(false) }
@@ -98,6 +101,32 @@ fun HomeScreen(viewModel: HomeViewModel = hiltViewModel()) {
                     )
                 }
                 item { Spacer(modifier = Modifier.height(16.dp)) }
+            }
+
+            // GÜNCELLEME DİYALOĞU
+            updateInfo?.let { info ->
+                AlertDialog(
+                    onDismissRequest = { viewModel.onUpdateDismissed() },
+                    icon = { Icon(Icons.Default.Update, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                    title = { Text("Güncelleme Mevcut!") },
+                    text = { 
+                        Column {
+                            Text("Uygulamanın yeni bir sürümü (${info.latestVersion}) hazır.", fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.height(8.dp))
+                            Text("Yeni özellikleri kullanmak ve hataları gidermek için güncellemeyi indirebilirsin.")
+                        }
+                    },
+                    confirmButton = {
+                        Button(onClick = { viewModel.onUpdateConfirmed() }) {
+                            Text("Şimdi İndir")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { viewModel.onUpdateDismissed() }) {
+                            Text("Sonra")
+                        }
+                    }
+                )
             }
 
             showAddDialog?.let {
@@ -242,7 +271,9 @@ fun StreakIcon(streak: Streak) {
     
     val scale by rememberInfiniteTransition(label = "streak_pulse").animateFloat(
         initialValue = 1f,
-        targetValue = if (streak.isCompletedToday) 1.1f else 1f,
+        targetValue = if (streak.isCompletedToday) {
+            if(streak.type == Streak.Type.PUSHUP) 1.2f else 1.1f
+        } else 1f,
         animationSpec = infiniteRepeatable(
             animation = tween(800),
             repeatMode = RepeatMode.Reverse

@@ -29,35 +29,29 @@ class AudioCoach @Inject constructor(
         if (status == TextToSpeech.SUCCESS) {
             val result = tts?.setLanguage(Locale.forLanguageTag("tr-TR"))
             if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
-                Log.e("AudioCoach", "Turkish language is not supported.")
-            } else {
-                isInitialized = true
+                Log.e("AudioCoach", "Turkish language not supported, falling back to English.")
+                tts?.setLanguage(Locale.US)
             }
+            isInitialized = true
         } else {
-            Log.e("AudioCoach", "TTS initialization failed with status: $status")
+            Log.e("AudioCoach", "TTS initialization failed status: $status")
         }
     }
 
-    fun announceExercise(exerciseName: String) {
+    fun announceExercise(text: String) {
         if (isInitialized) {
-            val textToSpeak = "Sıradaki: $exerciseName"
-            tts?.speak(textToSpeak, TextToSpeech.QUEUE_FLUSH, null, null)
-        } else {
-            Log.w("AudioCoach", "TTS not ready for announcement.")
+            tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "announcement")
         }
     }
 
     suspend fun playCountdown() {
         if (isInitialized) {
-            // Clear any ongoing speech
-            tts?.stop()
-            // Speak countdown with delays
-            for (i in 3 downTo 1) {
-                tts?.speak(i.toString(), TextToSpeech.QUEUE_ADD, null, i.toString())
-                delay(1000) // Wait for 1 second between numbers
-            }
-        } else {
-            Log.w("AudioCoach", "TTS not ready for countdown.")
+            // Flush any current speech to ensure countdown is immediate
+            tts?.speak("3", TextToSpeech.QUEUE_FLUSH, null, "3")
+            delay(1000)
+            tts?.speak("2", TextToSpeech.QUEUE_FLUSH, null, "2")
+            delay(1000)
+            tts?.speak("1", TextToSpeech.QUEUE_FLUSH, null, "1")
         }
     }
 
@@ -66,10 +60,8 @@ class AudioCoach @Inject constructor(
     }
 
     fun shutdown() {
-        if (tts != null) {
-            tts?.stop()
-            tts?.shutdown()
-        }
+        tts?.stop()
+        tts?.shutdown()
         isInitialized = false
     }
 }

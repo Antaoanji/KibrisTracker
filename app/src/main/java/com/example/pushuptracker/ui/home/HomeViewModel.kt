@@ -3,19 +3,15 @@ package com.example.pushuptracker.ui.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.pushuptracker.SettingsManager
+import com.example.pushuptracker.UpdateInfo
+import com.example.pushuptracker.UpdateManager
 import com.example.pushuptracker.ai.PushupSensorManager
 import com.example.pushuptracker.data.repo.PushupRepo
 import com.example.pushuptracker.data.repo.WaterRepo
 import com.example.pushuptracker.model.ActivityRecord
 import com.example.pushuptracker.model.Streak
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
@@ -29,16 +25,40 @@ class HomeViewModel @Inject constructor(
     private val pushupRepo: PushupRepo,
     private val waterRepo: WaterRepo,
     private val settingsManager: SettingsManager,
-    private val pushupSensorManager: PushupSensorManager
+    private val pushupSensorManager: PushupSensorManager,
+    private val updateManager: UpdateManager // NEW: Added UpdateManager
 ) : ViewModel() {
 
     private val today: String get() = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
     private val yesterday: String get() = LocalDate.now().minusDays(1).format(DateTimeFormatter.ISO_LOCAL_DATE)
 
+    // NEW: Update State
+    private val _updateInfo = MutableStateFlow<UpdateInfo?>(null)
+    val updateInfo = _updateInfo.asStateFlow()
+
     init {
         viewModelScope.launch {
             checkAndResetStreaks()
+            checkForUpdates() // NEW: Check for updates on startup
         }
+    }
+
+    private fun checkForUpdates() {
+        viewModelScope.launch {
+            val info = updateManager.checkForUpdates()
+            _updateInfo.value = info
+        }
+    }
+
+    fun onUpdateConfirmed() {
+        _updateInfo.value?.let {
+            updateManager.openDownloadPage(it.downloadUrl)
+        }
+        _updateInfo.value = null
+    }
+
+    fun onUpdateDismissed() {
+        _updateInfo.value = null
     }
 
     private val pushupDataFlow = combine(

@@ -2,6 +2,7 @@ package com.example.pushuptracker.di
 
 import com.example.pushuptracker.BuildConfig
 import com.example.pushuptracker.ai.GeminiApiService
+import com.example.pushuptracker.data.remote.GithubApiService
 import com.example.pushuptracker.data.remote.WgerApiService
 import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
 import dagger.Module
@@ -25,12 +26,17 @@ annotation class GeminiRetrofit
 @Retention(AnnotationRetention.BINARY)
 annotation class WgerRetrofit
 
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class GithubRetrofit
+
 @Module
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
 
     private const val GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/"
     private const val WGER_BASE_URL = "https://wger.de/api/v2/"
+    private const val GITHUB_BASE_URL = "https://api.github.com/"
 
     @Provides
     @Singleton
@@ -82,6 +88,17 @@ object NetworkModule {
 
     @Provides
     @Singleton
+    @GithubRetrofit
+    fun provideGithubOkHttpClient(): OkHttpClient {
+        return OkHttpClient.Builder()
+            .addInterceptor(provideLoggingInterceptor())
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(15, TimeUnit.SECONDS)
+            .build()
+    }
+
+    @Provides
+    @Singleton
     @GeminiRetrofit
     fun provideGeminiRetrofit(@GeminiRetrofit okHttpClient: OkHttpClient, json: Json): Retrofit {
         return Retrofit.Builder()
@@ -104,6 +121,17 @@ object NetworkModule {
 
     @Provides
     @Singleton
+    @GithubRetrofit
+    fun provideGithubRetrofit(@GithubRetrofit okHttpClient: OkHttpClient, json: Json): Retrofit {
+        return Retrofit.Builder()
+            .baseUrl(GITHUB_BASE_URL)
+            .client(okHttpClient)
+            .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
+            .build()
+    }
+
+    @Provides
+    @Singleton
     fun provideGeminiApiService(@GeminiRetrofit retrofit: Retrofit): GeminiApiService {
         return retrofit.create(GeminiApiService::class.java)
     }
@@ -112,5 +140,11 @@ object NetworkModule {
     @Singleton
     fun provideWgerApiService(@WgerRetrofit retrofit: Retrofit): WgerApiService {
         return retrofit.create(WgerApiService::class.java)
+    }
+
+    @Provides
+    @Singleton
+    fun provideGithubApiService(@GithubRetrofit retrofit: Retrofit): GithubApiService {
+        return retrofit.create(GithubApiService::class.java)
     }
 }

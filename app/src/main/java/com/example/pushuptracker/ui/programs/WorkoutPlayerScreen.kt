@@ -10,9 +10,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -27,8 +25,10 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -52,6 +52,14 @@ fun WorkoutPlayerScreen(navController: NavController, viewModel: WorkoutPlayerVi
     var showBottomSheet by remember { mutableStateOf(false) }
     var selectedExerciseForInfo by remember { mutableStateOf<Exercise?>(null) }
 
+    val currentView = LocalView.current
+    DisposableEffect(Unit) {
+        currentView.keepScreenOn = true
+        onDispose {
+            currentView.keepScreenOn = false
+        }
+    }
+
     val currentExerciseImage = when (val s = state) {
         is WorkoutState.InProgress -> s.exercise.imageUrl
         is WorkoutState.Resting -> s.nextExercise.imageUrl
@@ -69,7 +77,12 @@ fun WorkoutPlayerScreen(navController: NavController, viewModel: WorkoutPlayerVi
                         is WorkoutState.Finished -> "Antrenman Tamamlandı"
                         else -> "Antrenman"
                     }
-                    Text(titleText)
+                    Text(
+                        text = titleText,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.titleMedium // Daha küçük font ile sığmasını sağla
+                    )
                 },
                 navigationIcon = {
                     IconButton(onClick = { navController.navigateUp() }) {
@@ -78,12 +91,20 @@ fun WorkoutPlayerScreen(navController: NavController, viewModel: WorkoutPlayerVi
                 },
                 actions = {
                      if (state is WorkoutState.InProgress) {
-                         IconButton(onClick = { 
-                             selectedExerciseForInfo = (state as WorkoutState.InProgress).exercise
-                             showBottomSheet = true 
-                        }) {
-                            Icon(Icons.Default.Info, contentDescription = "Egzersiz Bilgisi")
-                        }
+                         Row(verticalAlignment = Alignment.CenterVertically) {
+                             IconButton(onClick = { viewModel.moveToPreviousExercise() }) {
+                                 Icon(Icons.Default.SkipPrevious, contentDescription = "Önceki")
+                             }
+                             IconButton(onClick = { viewModel.moveToNextExercise() }) {
+                                 Icon(Icons.Default.SkipNext, contentDescription = "Sonraki")
+                             }
+                             IconButton(onClick = { 
+                                 selectedExerciseForInfo = (state as WorkoutState.InProgress).exercise
+                                 showBottomSheet = true 
+                            }) {
+                                Icon(Icons.Default.Info, contentDescription = "Bilgi")
+                            }
+                         }
                      }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -118,9 +139,14 @@ fun WorkoutPlayerScreen(navController: NavController, viewModel: WorkoutPlayerVi
                         historyHint = currentState.historyHint,
                         coachSuggestion = currentState.coachSuggestion,
                         remainingTime = currentState.remainingExerciseTime,
+                        isTimerPaused = currentState.isTimerPaused,
                         isSwapping = isSwapping,
                         onSwap = { viewModel.swapCurrentExercise() },
-                        onSetFinished = { weight, difficulty, note -> viewModel.onSetFinished(weight, difficulty, note) }
+                        onRestartTimer = { viewModel.restartExerciseTimer() },
+                        onToggleTimer = { viewModel.toggleExerciseTimer() },
+                        onSetFinished = { weight, difficulty, note, reps -> 
+                            viewModel.onSetFinished(weight, difficulty, note, reps) 
+                        }
                     )
                     is WorkoutState.Resting -> RestScreen(
                         restTime = currentState.remainingTime,
@@ -174,14 +200,16 @@ fun ExerciseScreen(
     historyHint: String?,
     coachSuggestion: String?,
     remainingTime: Int?,
+    isTimerPaused: Boolean,
     isSwapping: Boolean,
     onSwap: () -> Unit,
-    onSetFinished: (weightUsed: Double?, difficulty: String, note: String?) -> Unit
+    onRestartTimer: () -> Unit,
+    onToggleTimer: () -> Unit,
+    onSetFinished: (weightUsed: Double?, difficulty: String, note: String?, actualReps: Int?) -> Unit
 ) {
     val scope = rememberCoroutineScope()
     var buttonClicked by remember(exercise.searchKey, set) { mutableStateOf(false) }
     
-    // Updated Warmup detection logic with more keywords
     val isWarmup = remember(exercise.name) {
         val warmupKeywords = listOf(
             "Isınma", "Çevirme", "Döndürme", "Jumping", "Kedi-Deve", 
@@ -200,6 +228,7 @@ fun ExerciseScreen(
 
     var weightInput by remember(exercise.searchKey) { mutableStateOf(initialWeight) }
     var noteInput by remember(exercise.searchKey) { mutableStateOf(initialNote) }
+    var repsInput by remember(exercise.searchKey, set) { mutableStateOf("") }
 
     val initialProgress = remember(exercise.sets, set) { if (exercise.sets > 0) (set - 1).toFloat() / exercise.sets.toFloat() else 0f }
     val finalProgress = remember(exercise.sets, set) { if (exercise.sets > 0) set.toFloat() / exercise.sets.toFloat() else 0f }
@@ -240,7 +269,7 @@ fun ExerciseScreen(
 
         Box(
             contentAlignment = Alignment.Center,
-            modifier = Modifier.size(250.dp).scale(pulseScale)
+            modifier = Modifier.size(260.dp).scale(pulseScale)
         ) {
             val strokeWidth = 16.dp
             Canvas(modifier = Modifier.fillMaxSize()) {
@@ -266,11 +295,26 @@ fun ExerciseScreen(
                         text = "$remainingTime",
                         style = MaterialTheme.typography.displayLarge.copy(
                             color = Color.White,
-                            fontSize = 100.sp,
+                            fontSize = 90.sp,
                             shadow = Shadow(Color.Black, blurRadius = 12f)
                         )
                     )
-                    Text("Saniye Kaldı", style = MaterialTheme.typography.titleMedium, color = Color.White.copy(alpha = 0.8f))
+                    Text(
+                        text = if (isTimerPaused) "Duraklatıldı" else "Saniye Kaldı", 
+                        style = MaterialTheme.typography.titleMedium, 
+                        color = Color.White.copy(alpha = 0.8f)
+                    )
+                    
+                    Spacer(Modifier.height(16.dp))
+                    
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        IconButton(onClick = onRestartTimer) {
+                            Icon(Icons.Default.Refresh, contentDescription = "Başa Sar", tint = Color.White.copy(alpha = 0.7f))
+                        }
+                        IconButton(onClick = onToggleTimer) {
+                            Icon(if (isTimerPaused) Icons.Default.PlayArrow else Icons.Default.Pause, contentDescription = "Durdur", tint = Color.White.copy(alpha = 0.7f))
+                        }
+                    }
                 } else {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
@@ -301,49 +345,59 @@ fun ExerciseScreen(
         
         Spacer(Modifier.weight(1f))
 
-        if (!isWarmup && historyHint != null) {
-            Text(
-                text = historyHint,
-                style = MaterialTheme.typography.bodySmall,
-                color = Color.White.copy(alpha = 0.7f),
-                modifier = Modifier.padding(bottom = 4.dp)
-            )
-        }
-        
-        if (!isWarmup && coachSuggestion != null) {
-            Text(
-                text = "💡 $coachSuggestion",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.primary,
-                 modifier = Modifier.padding(bottom = 8.dp)
-            )
+        if (!isWarmup && (historyHint != null || coachSuggestion != null)) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(bottom = 12.dp)) {
+                if (historyHint != null) {
+                    Text(text = historyHint, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.7f))
+                }
+                if (coachSuggestion != null) {
+                    Text(text = "💡 $coachSuggestion", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                }
+            }
         }
 
         if (!isWarmup) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = weightInput,
-                    onValueChange = { weightInput = it },
-                    label = { Text("Ağırlık (kg)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    singleLine = true,
-                    modifier = Modifier.weight(1f),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        unfocusedBorderColor = Color.White.copy(alpha = 0.5f),
-                        unfocusedLabelColor = Color.White.copy(alpha = 0.7f),
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = weightInput,
+                        onValueChange = { weightInput = it },
+                        label = { Text("Ağırlık (kg)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            unfocusedBorderColor = Color.White.copy(alpha = 0.5f),
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White
+                        )
                     )
-                )
+                    
+                    if (exercise.reps.contains("MAX", ignoreCase = true)) {
+                        OutlinedTextField(
+                            value = repsInput,
+                            onValueChange = { repsInput = it },
+                            label = { Text("Yapılan") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                unfocusedBorderColor = Color.White.copy(alpha = 0.5f),
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White
+                            )
+                        )
+                    }
+                }
+                
                 OutlinedTextField(
                     value = noteInput,
                     onValueChange = { noteInput = it },
                     label = { Text("Not (Plaka/Ayar)") },
                     singleLine = true,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
                         unfocusedBorderColor = Color.White.copy(alpha = 0.5f),
-                        unfocusedLabelColor = Color.White.copy(alpha = 0.7f),
                         focusedTextColor = Color.White,
                         unfocusedTextColor = Color.White
                     )
@@ -358,7 +412,7 @@ fun ExerciseScreen(
                 onClick = {
                     if (!buttonClicked) {
                         buttonClicked = true
-                        scope.launch { delay(500L); onSetFinished(null, "medium", "Isınma Tamamlandı") }
+                        scope.launch { delay(500L); onSetFinished(null, "medium", "Isınma Tamamlandı", null) }
                     }
                 },
                 enabled = !buttonClicked,
@@ -378,7 +432,7 @@ fun ExerciseScreen(
                     onClick = {
                         if (!buttonClicked) {
                             buttonClicked = true
-                            scope.launch { delay(800L); onSetFinished(weightInput.toDoubleOrNull(), "easy", noteInput) }
+                            scope.launch { delay(800L); onSetFinished(weightInput.toDoubleOrNull(), "easy", noteInput, repsInput.toIntOrNull()) }
                         }
                     },
                     enabled = !buttonClicked,
@@ -389,7 +443,7 @@ fun ExerciseScreen(
                     onClick = {
                         if (!buttonClicked) {
                             buttonClicked = true
-                            scope.launch { delay(800L); onSetFinished(weightInput.toDoubleOrNull(), "medium", noteInput) }
+                            scope.launch { delay(800L); onSetFinished(weightInput.toDoubleOrNull(), "medium", noteInput, repsInput.toIntOrNull()) }
                         }
                     },
                     enabled = !buttonClicked,
@@ -400,7 +454,7 @@ fun ExerciseScreen(
                     onClick = {
                         if (!buttonClicked) {
                             buttonClicked = true
-                            scope.launch { delay(800L); onSetFinished(weightInput.toDoubleOrNull(), "hard", noteInput) }
+                            scope.launch { delay(800L); onSetFinished(weightInput.toDoubleOrNull(), "hard", noteInput, repsInput.toIntOrNull()) }
                         }
                     },
                     enabled = !buttonClicked,

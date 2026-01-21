@@ -1,11 +1,13 @@
 package com.example.pushuptracker.ui.programs
 
-import android.util.Log
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import android.content.Intent
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.pushuptracker.BuildConfig
 import com.example.pushuptracker.SettingsManager
 import com.example.pushuptracker.audio.AudioCoach
+import com.example.pushuptracker.audio.WorkoutService
 import com.example.pushuptracker.data.repo.PushupRepo
 import com.example.pushuptracker.di.WorkoutHolder
 import com.example.pushuptracker.model.ActivityRecord
@@ -17,7 +19,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -32,7 +33,9 @@ sealed class WorkoutState {
         val currentExerciseIndex: Int,
         val historyHint: String?,
         val coachSuggestion: String?,
-        val remainingExerciseTime: Int? = null // New: for timed exercises
+        val remainingExerciseTime: Int? = null,
+        val isTimerPaused: Boolean = false,
+        val isPreparing: Boolean = false
     ) : WorkoutState()
     data class Resting(val nextExercise: Exercise, val nextSet: Int, val remainingTime: Int, val initialDuration: Int) : WorkoutState()
     data class Finished(
@@ -44,11 +47,12 @@ sealed class WorkoutState {
 
 @HiltViewModel
 class WorkoutPlayerViewModel @Inject constructor(
+    application: Application,
     private val workoutHolder: WorkoutHolder,
     private val settingsManager: SettingsManager,
     private val audioCoach: AudioCoach,
     private val pushupRepo: PushupRepo
-) : ViewModel() {
+) : AndroidViewModel(application) {
 
     private val _workoutState = MutableStateFlow<WorkoutState>(WorkoutState.Loading)
     val workoutState = _workoutState.asStateFlow()
@@ -85,6 +89,26 @@ class WorkoutPlayerViewModel @Inject constructor(
         updateStateWithHistory(exercise, workoutHolder.currentSetIndex)
     }
 
+    private fun startService(title: String, content: String) {
+        val intent = Intent(getApplication(), WorkoutService::class.java).apply {
+            putExtra("title", title)
+            putExtra("content", content)
+        }
+        getApplication<Application>().startForegroundService(intent)
+    }
+
+    private fun stopService() {
+        getApplication<Application>().stopService(Intent(getApplication(), WorkoutService::class.java))
+    }
+
+    private fun updateNotification(title: String, content: String) {
+        val intent = Intent(getApplication(), WorkoutService::class.java).apply {
+            putExtra("title", title)
+            putExtra("content", content)
+        }
+        getApplication<Application>().startForegroundService(intent)
+    }
+
     private fun isWarmup(exercise: Exercise): Boolean {
         val warmupKeywords = listOf(
             "Isınma", "Çevirme", "Döndürme", "Jumping", "Kedi-Deve", 
@@ -96,19 +120,34 @@ class WorkoutPlayerViewModel @Inject constructor(
                exercise.reps.contains("Dakika")
     }
 
-    fun onSetFinished(weightUsed: Double?, difficulty: String, note: String? = null) = viewModelScope.launch {
+    private fun getDominantDifficulty(): String {
+        if (sessionDifficulties.isEmpty()) return "Dengeli"
+        val dominant = sessionDifficulties.groupingBy { it }.eachCount().maxByOrNull { it.value }?.key
+        return when (dominant) {
+            "easy" -> "Rahat"
+            "medium" -> "Dengeli"
+            "hard" -> "Zorlu"
+            else -> "Dengeli"
+        }
+    }
+
+    fun onSetFinished(weightUsed: Double?, difficulty: String, note: String? = null, actualReps: Int? = null) = viewModelScope.launch {
         timerJob?.cancel()
         exerciseTimerJob?.cancel()
         val workout = workoutHolder.workout ?: return@launch
         val currentExercise = workout.exercises[workoutHolder.currentExerciseIndex]
         
-        val repsString = currentExercise.reps
-        val reps = if (repsString == "MAX" || repsString.contains("Dakika") || repsString.contains("Saniye")) 20 else repsString.split('-').mapNotNull { it.trim().toIntOrNull() }.average().toInt()
+        val repsText = currentExercise.reps
+        val reps = actualReps?.toDouble() ?: when {
+            repsText.contains("MAX", ignoreCase = true) -> 20.0
+            repsText.contains("Dakika") || repsText.contains("Saniye") -> 20.0
+            else -> repsText.split('-').mapNotNull { it.trim().toDoubleOrNull() }.average()
+        }
 
         val key = if (currentExercise.searchKey.isNotBlank()) currentExercise.searchKey else currentExercise.name
         val record = ActivityRecord(
             type = key,
-            value = reps.toDouble(),
+            value = reps,
             date = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE),
             weightUsed = weightUsed,
             note = note,
@@ -141,6 +180,71 @@ class WorkoutPlayerViewModel @Inject constructor(
                 }
             } else {
                 finishWorkout(false)
+            }
+        }
+    }
+
+    fun moveToNextExercise() = viewModelScope.launch {
+        timerJob?.cancel()
+        exerciseTimerJob?.cancel()
+        val workout = workoutHolder.workout ?: return@launch
+        
+        if (workoutHolder.currentExerciseIndex < workout.exercises.size - 1) {
+            workoutHolder.currentExerciseIndex++
+            workoutHolder.currentSetIndex = 1
+            val exercise = workout.exercises[workoutHolder.currentExerciseIndex]
+            updateStateWithHistory(exercise, workoutHolder.currentSetIndex)
+        } else {
+            finishWorkout(false)
+        }
+    }
+
+    fun moveToPreviousExercise() = viewModelScope.launch {
+        timerJob?.cancel()
+        exerciseTimerJob?.cancel()
+        val workout = workoutHolder.workout ?: return@launch
+        
+        if (workoutHolder.currentExerciseIndex > 0) {
+            workoutHolder.currentExerciseIndex--
+            workoutHolder.currentSetIndex = 1
+            val exercise = workout.exercises[workoutHolder.currentExerciseIndex]
+            updateStateWithHistory(exercise, workoutHolder.currentSetIndex)
+        }
+    }
+
+    fun restartExerciseTimer() {
+        val currentState = _workoutState.value
+        if (currentState is WorkoutState.InProgress) {
+            val exercise = currentState.exercise
+            val repsText = exercise.reps
+            val initialTime = when {
+                repsText.contains("Dakika") -> {
+                    val mins = repsText.split(" ")[0].toIntOrNull() ?: 1
+                    mins * 60
+                }
+                repsText.contains("Saniye") -> {
+                    repsText.split(" ")[0].toIntOrNull() ?: 30
+                }
+                else -> null
+            }
+            if (initialTime != null) {
+                _workoutState.value = currentState.copy(remainingExerciseTime = initialTime, isTimerPaused = false, isPreparing = false)
+                startExerciseTimer(initialTime)
+            }
+        }
+    }
+
+    fun toggleExerciseTimer() {
+        val currentState = _workoutState.value
+        if (currentState is WorkoutState.InProgress && currentState.remainingExerciseTime != null) {
+            val newPausedState = !currentState.isTimerPaused
+            _workoutState.value = currentState.copy(isTimerPaused = newPausedState)
+            
+            if (newPausedState) {
+                exerciseTimerJob?.cancel()
+                updateNotification("Duraklatıldı: ${currentState.exercise.name}", "${currentState.remainingExerciseTime} sn kaldı")
+            } else {
+                startExerciseTimer(currentState.remainingExerciseTime)
             }
         }
     }
@@ -179,18 +283,8 @@ class WorkoutPlayerViewModel @Inject constructor(
         }
     }
 
-    private fun getDominantDifficulty(): String {
-        if (sessionDifficulties.isEmpty()) return "Dengeli"
-        val dominant = sessionDifficulties.groupingBy { it }.eachCount().maxByOrNull { it.value }?.key
-        return when (dominant) {
-            "easy" -> "Rahat"
-            "medium" -> "Dengeli"
-            "hard" -> "Zorlu"
-            else -> "Dengeli"
-        }
-    }
-
     private fun finishWorkout(isPlanFinished: Boolean) {
+        stopService()
         val totalTimeMillis = System.currentTimeMillis() - startTimeMillis
         val totalTimeMinutes = (totalTimeMillis / 60000).toInt()
 
@@ -227,12 +321,16 @@ class WorkoutPlayerViewModel @Inject constructor(
     private fun startRest(duration: Int, nextExercise: Exercise, nextSet: Int) {
         timerJob?.cancel()
         exerciseTimerJob?.cancel()
+        startService("Dinlenme Başladı", "$duration saniye kaldı")
         timerJob = viewModelScope.launch {
             var remainingTime = duration
             val initialDuration = if (duration > 0) duration else 1
             var countdownStarted = false
             while (remainingTime > 0) {
                 _workoutState.value = WorkoutState.Resting(nextExercise, nextSet, remainingTime, initialDuration)
+                updateNotification("Dinlenme: $remainingTime sn", "Sıradaki: ${nextExercise.name}")
+                
+                // FIXED: Start countdown slightly earlier to ensure '3' is audible
                 if (remainingTime <= 3 && !countdownStarted) {
                     countdownStarted = true
                     audioCoach.playCountdown()
@@ -276,7 +374,7 @@ class WorkoutPlayerViewModel @Inject constructor(
 
         val hint = lastRecord?.let {
             val reps = it.value.toInt()
-            val weight = it.weightUsed?.toInt()
+            val weight = it.weightUsed 
             val note = it.note
             val weightPart = if (weight != null && weight > 0) " @ $weight kg" else ""
             val notePart = if (!note.isNullOrBlank()) " ($note)" else ""
@@ -294,7 +392,6 @@ class WorkoutPlayerViewModel @Inject constructor(
 
         val workout = workoutHolder.workout!!
         
-        // Handle Timed Exercises
         val repsText = exercise.reps
         val initialTime = when {
             repsText.contains("Dakika") -> {
@@ -314,11 +411,21 @@ class WorkoutPlayerViewModel @Inject constructor(
             workoutHolder.currentExerciseIndex + 1,
             historyHint = hint,
             coachSuggestion = coachSuggestion,
-            remainingExerciseTime = initialTime
+            remainingExerciseTime = initialTime,
+            isTimerPaused = false,
+            isPreparing = initialTime != null
         )
 
         if (initialTime != null) {
-            startExerciseTimer(initialTime)
+            startService("Hareket: ${exercise.name}", "Hazırlanılıyor...")
+            delay(2000)
+            val currentState = _workoutState.value
+            if (currentState is WorkoutState.InProgress) {
+                _workoutState.value = currentState.copy(isPreparing = false)
+                startExerciseTimer(initialTime)
+            }
+        } else {
+            startService("Hareket: ${exercise.name}", "$setIndex. Set yapılıyor")
         }
     }
 
@@ -326,25 +433,34 @@ class WorkoutPlayerViewModel @Inject constructor(
         exerciseTimerJob?.cancel()
         exerciseTimerJob = viewModelScope.launch {
             var time = seconds
+            var countdownStarted = false
             while (time > 0) {
                 val currentState = _workoutState.value
                 if (currentState is WorkoutState.InProgress) {
+                    if (currentState.isTimerPaused) break 
                     _workoutState.value = currentState.copy(remainingExerciseTime = time)
+                    updateNotification("Hareket: ${currentState.exercise.name}", "$time sn kaldı")
+                    
+                    // FIXED: Ensure '3' is audible by triggering slightly before 3.0s mark
+                    if (time <= 3 && !countdownStarted) {
+                        countdownStarted = true
+                        audioCoach.playCountdown()
+                    }
                 }
                 delay(1000)
                 time--
             }
-            // Auto finish when time is up
             if (time <= 0) {
                 audioCoach.announceExercise("Süre bitti!")
-                delay(1000) // Give a second for the announcement/ui to settle
-                onSetFinished(null, "medium", "Otomatik Tamamlandı")
+                delay(1000)
+                onSetFinished(null, "medium", "Otomatik Tamamlandı", null)
             }
         }
     }
 
     override fun onCleared() {
         super.onCleared()
+        stopService()
         audioCoach.shutdown()
         timerJob?.cancel()
         exerciseTimerJob?.cancel()

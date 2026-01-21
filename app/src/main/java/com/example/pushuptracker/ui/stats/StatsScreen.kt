@@ -29,12 +29,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.mikephil.charting.charts.BarChart
 import com.github.mikephil.charting.charts.LineChart
 import com.github.mikephil.charting.components.XAxis
-import com.github.mikephil.charting.data.BarData
-import com.github.mikephil.charting.data.BarDataSet
-import com.github.mikephil.charting.data.BarEntry
-import com.github.mikephil.charting.data.Entry
-import com.github.mikephil.charting.data.LineData
-import com.github.mikephil.charting.data.LineDataSet
+import com.github.mikephil.charting.data.*
 import com.github.mikephil.charting.formatter.ValueFormatter
 import java.time.Duration
 import java.time.LocalDate
@@ -81,9 +76,12 @@ fun StatsScreen(viewModel: StatsViewModel = hiltViewModel()) {
                     hasPermissions = hasHealthPermissions,
                     sessions = healthSessions,
                     onConnectClick = { 
-                        val perms = viewModel.getHealthPermissions()
-                        Log.d("HealthConnect", "Launching permissions with: $perms")
-                        permissionLauncher.launch(perms) 
+                        try {
+                            val perms = viewModel.getHealthPermissions()
+                            permissionLauncher.launch(perms) 
+                        } catch (e: Exception) {
+                            Log.e("HealthConnect", "Failed to launch permissions", e)
+                        }
                     },
                     onRefreshClick = { viewModel.loadHealthData() }
                 )
@@ -108,7 +106,6 @@ fun OverallStatsCard(stats: OverallStats, weeklyChange: ChangeStats, monthlyChan
             }
             Spacer(modifier = Modifier.height(16.dp))
             
-            // Total Calories Display
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -262,9 +259,16 @@ fun PushupChartCard(chartUiState: ChartUiState, chartTimeSpan: ChartTimeSpan, ch
             Spacer(modifier = Modifier.height(16.dp))
             ChartControls(chartTimeSpan = chartTimeSpan, chartType = chartType, onTimeSpanSelected = { viewModel.setChartTimeSpan(it) }, onTypeSelected = { viewModel.setChartType(it) })
             Spacer(modifier = Modifier.height(16.dp))
-            StatsChart(chartUiState = chartUiState, timeSpan = chartTimeSpan, chartType = chartType, modifier = Modifier
-                .fillMaxWidth()
-                .height(250.dp))
+            
+            if (chartUiState.records.isEmpty()) {
+                Box(modifier = Modifier.fillMaxWidth().height(250.dp), contentAlignment = Alignment.Center) {
+                    Text("Henüz veri bulunmuyor.", color = ComposeColor.Gray)
+                }
+            } else {
+                StatsChart(chartUiState = chartUiState, timeSpan = chartTimeSpan, chartType = chartType, modifier = Modifier
+                    .fillMaxWidth()
+                    .height(250.dp))
+            }
         }
     }
 }
@@ -334,28 +338,37 @@ fun StatsChart(chartUiState: ChartUiState, timeSpan: ChartTimeSpan, chartType: C
             },
             update = { chart ->
                 val today = LocalDate.now()
-                val rawEntries = when (timeSpan) {
-                    ChartTimeSpan.WEEK -> {
-                        val startDate = today.minusDays(6)
-                        (0..6).map {
-                            val date = startDate.plusDays(it.toLong())
-                            val record = chartUiState.records.find { r -> LocalDate.parse(r.date) == date }
-                            Entry(it.toFloat(), record?.value?.toFloat() ?: 0f)
+                val rawEntries = try {
+                    when (timeSpan) {
+                        ChartTimeSpan.WEEK -> {
+                            val startDate = today.minusDays(6)
+                            (0..6).map {
+                                val date = startDate.plusDays(it.toLong())
+                                val record = chartUiState.records.find { r -> 
+                                    try { LocalDate.parse(r.date) == date } catch(e: Exception) { false }
+                                }
+                                Entry(it.toFloat(), record?.value?.toFloat() ?: 0f)
+                            }
+                        }
+                        ChartTimeSpan.YEAR -> {
+                            val startDate = today.minusMonths(11).withDayOfMonth(1)
+                            (0..11).map {
+                                val targetMonth = startDate.plusMonths(it.toLong())
+                                val monthValue = chartUiState.records.filter { r ->
+                                    try {
+                                        val recordDate = LocalDate.parse(r.date)
+                                        recordDate.year == targetMonth.year && recordDate.month == targetMonth.month
+                                    } catch(e: Exception) { false }
+                                }.sumOf { it.value }.toFloat()
+                                Entry(it.toFloat(), monthValue)
+                            }
                         }
                     }
-                    ChartTimeSpan.YEAR -> {
-                        // Start 11 months ago to show a total of 12 months
-                        val startDate = today.minusMonths(11).withDayOfMonth(1)
-                        (0..11).map {
-                            val targetMonth = startDate.plusMonths(it.toLong())
-                            val monthValue = chartUiState.records.filter { r ->
-                                val recordDate = LocalDate.parse(r.date)
-                                recordDate.year == targetMonth.year && recordDate.month == targetMonth.month
-                            }.sumOf { it.value }.toFloat()
-                            Entry(it.toFloat(), monthValue)
-                        }
-                    }
+                } catch (e: Exception) {
+                    emptyList<Entry>()
                 }
+
+                if (rawEntries.isEmpty()) return@AndroidView
 
                 if (chart is BarChart && chartType == ChartType.BAR) {
                     val barEntries = rawEntries.map { BarEntry(it.x, it.y) }
@@ -386,22 +399,19 @@ fun StatsChart(chartUiState: ChartUiState, timeSpan: ChartTimeSpan, chartType: C
                         return try {
                             when (timeSpan) {
                                 ChartTimeSpan.WEEK -> {
-                                    today.minusDays((6 - idx).toLong()).format(DateTimeFormatter.ofPattern("dd MMM"))
+                                    today.minusDays((rawEntries.size - 1 - idx).toLong()).format(DateTimeFormatter.ofPattern("dd MMM"))
                                 }
                                 ChartTimeSpan.YEAR -> {
-                                    today.minusMonths((11 - idx).toLong()).format(DateTimeFormatter.ofPattern("MMM"))
+                                    today.minusMonths((rawEntries.size - 1 - idx).toLong()).format(DateTimeFormatter.ofPattern("MMM"))
                                 }
                             }
-                        } catch (e: Exception) {
-                            ""
-                        }
+                        } catch (e: Exception) { "" }
                     }
                 }
 
                 chart.xAxis.labelCount = if (timeSpan == ChartTimeSpan.WEEK) 7 else 12
                 chart.xAxis.axisMinimum = -0.5f
                 chart.xAxis.axisMaximum = rawEntries.size.toFloat() - 0.5f
-                
                 chart.invalidate()
             }
         )
