@@ -39,12 +39,17 @@ class PushupRepo @Inject constructor(private val pushupDao: PushupDao) {
     fun getAllRecords(): Flow<List<ActivityRecord>> = pushupDao.getAllRecords()
     fun getRecordForDate(date: String): Flow<ActivityRecord?> = pushupDao.getRecordForDate(date)
 
+    fun getRecordByDateAndType(date: String, type: String): Flow<ActivityRecord?> = 
+        pushupDao.getRecordByDateAndType(date, type)
+
+    // Doğru isimlendirme: DAO ile uyumlu
+    fun getRecordsByType(type: String): Flow<List<ActivityRecord>> = 
+        pushupDao.getRecordsByType(type)
+
     suspend fun getLastRecordForExercise(exerciseType: String): ActivityRecord? =
         pushupDao.getLastRecordForExercise(exerciseType)
 
     fun getDistinctExerciseTypes(): Flow<List<String>> = pushupDao.getDistinctExerciseTypes()
-    fun getAllRecordsForType(type: String): Flow<List<ActivityRecord>> =
-        pushupDao.getAllRecordsForType(type)
 
     fun getAllPushupRecords(): Flow<List<ActivityRecord>> = pushupDao.getAllPushupRecords()
 }

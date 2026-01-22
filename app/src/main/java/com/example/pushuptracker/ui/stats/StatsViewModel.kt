@@ -11,8 +11,9 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import java.time.Instant
 import java.time.LocalDate
-import java.time.temporal.ChronoUnit
+import java.time.ZoneId
 import java.time.temporal.WeekFields
 import java.util.Locale
 import javax.inject.Inject
@@ -60,8 +61,8 @@ class StatsViewModel @Inject constructor(
     private val _hasHealthPermissions = MutableStateFlow(false)
     val hasHealthPermissions = _hasHealthPermissions.asStateFlow()
 
-    private val _healthCalories = MutableStateFlow(0)
-    val healthCalories = _healthCalories.asStateFlow()
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing = _isRefreshing.asStateFlow()
 
     val exerciseList = pushupRepo.getDistinctExerciseTypes()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), listOf("pushup"))
@@ -86,11 +87,33 @@ class StatsViewModel @Inject constructor(
 
     fun loadHealthData() {
         viewModelScope.launch {
+            _isRefreshing.value = true
             try {
+                // 1. Antrenman seanslarını oku (Sadece UI için)
                 _healthSessions.value = healthConnectManager.readExerciseSessions()
-                _healthCalories.value = healthConnectManager.readTotalCalories().toInt()
+
+                // 2. Son 30 günlük kalorileri oku ve DB'ye KAYDET
+                val caloriesMap = healthConnectManager.readDailyCalories(
+                    start = Instant.now().minusSeconds(30 * 24 * 60 * 60),
+                    end = Instant.now()
+                )
+
+                caloriesMap.forEach { (date, calories) ->
+                    if (calories > 0) {
+                        pushupRepo.insertRecord(
+                            ActivityRecord(
+                                type = "calories",
+                                value = calories,
+                                date = date,
+                                timestamp = System.currentTimeMillis()
+                            )
+                        )
+                    }
+                }
             } catch (e: Exception) {
-                Log.e("StatsViewModel", "Failed to load health data", e)
+                Log.e("StatsViewModel", "Failed to sync health data", e)
+            } finally {
+                _isRefreshing.value = false
             }
         }
     }
@@ -100,23 +123,25 @@ class StatsViewModel @Inject constructor(
     val chartUiState = combine(
         selectedExercise,
         chartTimeSpan
-    ) { exerciseType, timeSpan ->
-        Pair(exerciseType, timeSpan)
-    }.flatMapLatest { (exerciseType, timeSpan) ->
-        pushupRepo.getAllRecordsForType(exerciseType).map {
-            val yAxisLabel = if (exerciseType == "pushup") "Tekrar" else "Ağırlık (kg)"
-            ChartUiState(it, yAxisLabel)
+    ) { exerciseType, _ -> exerciseType }.flatMapLatest { exerciseType ->
+        pushupRepo.getRecordsByType(exerciseType).map { records ->
+            val yAxisLabel = when(exerciseType) {
+                "pushup" -> "Tekrar"
+                "calories" -> "kcal"
+                "water" -> "ml"
+                else -> "Değer"
+            }
+            ChartUiState(records, yAxisLabel)
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ChartUiState())
 
     val overallStats = combine(
         pushupRepo.getAllRecords(),
-        _healthCalories
-    ) { records, hCalories ->
+        pushupRepo.getRecordsByType("calories")
+    ) { records, calorieRecords ->
         val totalPushups = records.filter { it.type == "pushup" }.sumOf { it.value }.toInt()
         val totalWater = records.filter { it.type == "water" }.sumOf { it.value }.toInt()
-        
-        val pushupCalories = totalPushups * 0.5 
+        val totalCalories = calorieRecords.sumOf { it.value }.toInt()
         
         val pushupDates = records.filter { it.type == "pushup" && it.value > 0 }
             .mapNotNull { 
@@ -125,7 +150,7 @@ class StatsViewModel @Inject constructor(
 
         var currentStreak = 0
         if (pushupDates.isNotEmpty()) {
-            var currentDate = LocalDate.now()
+            val currentDate = LocalDate.now()
             if (pushupDates.first().isEqual(currentDate) || pushupDates.first().isEqual(currentDate.minusDays(1))) {
                 currentStreak = 1
                 var lastDate = pushupDates.first()
@@ -139,22 +164,19 @@ class StatsViewModel @Inject constructor(
                         break
                     }
                 }
-                if (!pushupDates.contains(LocalDate.now()) && !pushupDates.contains(LocalDate.now().minusDays(1))) {
-                    currentStreak = 0
-                }
             }
         }
         OverallStats(
             totalPushups = totalPushups, 
             totalWater = totalWater, 
-            totalCalories = hCalories + pushupCalories.toInt(),
+            totalCalories = totalCalories,
             currentStreak = currentStreak
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), OverallStats())
 
 
     val weeklyChange = selectedExercise.flatMapLatest { exerciseType ->
-        pushupRepo.getAllRecordsForType(exerciseType)
+        pushupRepo.getRecordsByType(exerciseType)
     }.map { records ->
         val today = LocalDate.now()
         val weekFields = WeekFields.of(Locale.getDefault())
@@ -179,7 +201,7 @@ class StatsViewModel @Inject constructor(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ChangeStats())
 
     val monthlyChange = selectedExercise.flatMapLatest { exerciseType ->
-        pushupRepo.getAllRecordsForType(exerciseType)
+        pushupRepo.getRecordsByType(exerciseType)
     }.map { records ->
         val today = LocalDate.now()
         val startOfThisMonth = today.withDayOfMonth(1)
@@ -188,7 +210,7 @@ class StatsViewModel @Inject constructor(
         val thisMonthValue = records.filter {
             try {
                 val date = LocalDate.parse(it.date)
-                !date.isBefore(startOfThisMonth) && date.isBefore(startOfThisMonth.plusMonths(1))
+                !date.isBefore(startOfThisMonth) && date.isBefore(startOfThisMonth.plusWeeks(1))
             } catch (e: Exception) { false }
         }.sumOf { it.value }.toInt()
 

@@ -105,7 +105,16 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun MainScreen() {
     val navController = rememberNavController()
-    val screens = remember { listOf(Screen.Home, Screen.Programs, Screen.Stats, Screen.Achievements, Screen.Profile) }
+    // Assistant sekmesi kaldırıldı
+    val screens = remember {
+        listOf(
+            Screen.Home,
+            Screen.Programs,
+            Screen.Stats,
+            Screen.Achievements,
+            Screen.Profile
+        )
+    }
 
     Scaffold(
         bottomBar = {
@@ -117,7 +126,7 @@ fun MainScreen() {
                     screen.icon?.let {
                         NavigationBarItem(
                             icon = { Icon(it, contentDescription = stringResource(id = screen.titleRes)) },
-                            label = { Text(stringResource(id = screen.titleRes)) },
+                            label = { Text(stringResource(id = screen.titleRes), style = MaterialTheme.typography.labelSmall) },
                             selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true,
                             onClick = {
                                 navController.navigate(screen.route) {

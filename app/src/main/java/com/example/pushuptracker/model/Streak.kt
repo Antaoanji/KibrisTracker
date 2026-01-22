@@ -8,6 +8,7 @@ data class Streak(
     enum class Type {
         PUSHUP,
         WATER,
-        WORKOUT
+        WORKOUT,
+        WALKING // NEW: Japon Yürüyüşü için tip eklendi
     }
 }

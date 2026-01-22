@@ -10,6 +10,9 @@ import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -30,7 +33,7 @@ class HealthConnectManager @Inject constructor(
     }
 
     suspend fun readExerciseSessions(
-        start: Instant = Instant.now().minusSeconds(24 * 60 * 60), // Son 24 saat
+        start: Instant = Instant.now().minusSeconds(24 * 60 * 60),
         end: Instant = Instant.now()
     ): List<ExerciseSessionRecord> {
         return try {
@@ -48,8 +51,8 @@ class HealthConnectManager @Inject constructor(
     }
 
     suspend fun readTotalCalories(
-        start: Instant = Instant.now().minusSeconds(24 * 60 * 60),
-        end: Instant = Instant.now()
+        start: Instant,
+        end: Instant
     ): Double {
         return try {
             val response = healthConnectClient.readRecords(
@@ -62,6 +65,33 @@ class HealthConnectManager @Inject constructor(
         } catch (e: Exception) {
             Log.e("HealthConnect", "Error reading calories", e)
             0.0
+        }
+    }
+
+    /**
+     * Verileri gün gün gruplayarak okur. Senkronizasyon için idealdir.
+     */
+    suspend fun readDailyCalories(
+        start: Instant,
+        end: Instant
+    ): Map<String, Double> {
+        return try {
+            val response = healthConnectClient.readRecords(
+                ReadRecordsRequest(
+                    recordType = ActiveCaloriesBurnedRecord::class,
+                    timeRangeFilter = TimeRangeFilter.between(start, end)
+                )
+            )
+
+            response.records.groupBy {
+                LocalDate.ofInstant(it.startTime, ZoneId.systemDefault())
+                    .format(DateTimeFormatter.ISO_LOCAL_DATE)
+            }.mapValues { entry ->
+                entry.value.sumOf { it.energy.inKilocalories }
+            }
+        } catch (e: Exception) {
+            Log.e("HealthConnect", "Error reading daily calories", e)
+            emptyMap()
         }
     }
 }

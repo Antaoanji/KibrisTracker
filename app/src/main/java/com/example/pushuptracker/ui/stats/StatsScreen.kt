@@ -3,17 +3,20 @@ package com.example.pushuptracker.ui.stats
 import android.graphics.Color
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
@@ -47,6 +50,7 @@ fun StatsScreen(viewModel: StatsViewModel = hiltViewModel()) {
     
     val healthSessions by viewModel.healthSessions.collectAsStateWithLifecycle()
     val hasHealthPermissions by viewModel.hasHealthPermissions.collectAsStateWithLifecycle()
+    val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = PermissionController.createRequestPermissionResultContract()
@@ -64,7 +68,13 @@ fun StatsScreen(viewModel: StatsViewModel = hiltViewModel()) {
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
             item {
-                OverallStatsCard(stats = overallStats, weeklyChange = weeklyChange, monthlyChange = monthlyChange)
+                OverallStatsCard(
+                    stats = overallStats,
+                    weeklyChange = weeklyChange,
+                    monthlyChange = monthlyChange,
+                    isRefreshing = isRefreshing,
+                    onRefresh = { viewModel.loadHealthData() }
+                )
             }
             
             item {
@@ -75,7 +85,8 @@ fun StatsScreen(viewModel: StatsViewModel = hiltViewModel()) {
                 HealthConnectCard(
                     hasPermissions = hasHealthPermissions,
                     sessions = healthSessions,
-                    onConnectClick = { 
+                    isRefreshing = isRefreshing,
+                    onConnectClick = {
                         try {
                             val perms = viewModel.getHealthPermissions()
                             permissionLauncher.launch(perms) 
@@ -91,13 +102,44 @@ fun StatsScreen(viewModel: StatsViewModel = hiltViewModel()) {
 }
 
 @Composable
-fun OverallStatsCard(stats: OverallStats, weeklyChange: ChangeStats, monthlyChange: ChangeStats) {
+fun OverallStatsCard(
+    stats: OverallStats,
+    weeklyChange: ChangeStats,
+    monthlyChange: ChangeStats,
+    isRefreshing: Boolean,
+    onRefresh: () -> Unit
+) {
     Card(
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = ComposeColor(0xFF2C2C2E))
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text("Genel İstatistikler", style = MaterialTheme.typography.headlineSmall, color = ComposeColor.White)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Genel İstatistikler", style = MaterialTheme.typography.headlineSmall, color = ComposeColor.White)
+
+                val rotation by animateFloatAsState(
+                    targetValue = if (isRefreshing) 360f else 0f,
+                    animationSpec = if (isRefreshing) {
+                        infiniteRepeatable(tween(1000, easing = LinearEasing), RepeatMode.Restart)
+                    } else {
+                        tween(0)
+                    }, label = "sync_rotation"
+                )
+
+                IconButton(onClick = onRefresh) {
+                    Icon(
+                        Icons.Default.Sync,
+                        contentDescription = "Senkronize Et",
+                        tint = ComposeColor(0xFF00F5D4),
+                        modifier = Modifier.rotate(rotation)
+                    )
+                }
+            }
+
             Spacer(modifier = Modifier.height(16.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
                 StatItem(value = stats.totalPushups.toString(), label = "Toplam Şınav")
@@ -117,7 +159,7 @@ fun OverallStatsCard(stats: OverallStats, weeklyChange: ChangeStats, monthlyChan
                 Icon(Icons.Default.Sync, contentDescription = null, tint = ComposeColor(0xFF00F5D4), modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    text = "Toplam Yakılan: ${stats.totalCalories} kcal",
+                    text = "Xiaomi Band Kalori: ${stats.totalCalories} kcal",
                     color = ComposeColor.White,
                     fontWeight = FontWeight.Bold,
                     fontSize = 16.sp
@@ -136,6 +178,7 @@ fun OverallStatsCard(stats: OverallStats, weeklyChange: ChangeStats, monthlyChan
 fun HealthConnectCard(
     hasPermissions: Boolean,
     sessions: List<ExerciseSessionRecord>,
+    isRefreshing: Boolean,
     onConnectClick: () -> Unit,
     onRefreshClick: () -> Unit
 ) {
@@ -149,10 +192,15 @@ fun HealthConnectCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Health Connect Verileri", style = MaterialTheme.typography.headlineSmall, color = ComposeColor.White)
+                Text("Xiaomi Band Verileri", style = MaterialTheme.typography.headlineSmall, color = ComposeColor.White)
                 if (hasPermissions) {
                     IconButton(onClick = onRefreshClick) {
-                        Icon(Icons.Default.Sync, contentDescription = "Yenile", tint = ComposeColor(0xFF00F5D4))
+                        Icon(
+                            Icons.Default.Refresh,
+                            contentDescription = "Yenile",
+                            tint = ComposeColor(0xFF00F5D4),
+                            modifier = Modifier.rotate(if (isRefreshing) 180f else 0f)
+                        )
                     }
                 }
             }
@@ -176,6 +224,22 @@ fun HealthConnectCard(
                     sessions.forEach { session ->
                         HealthSessionItem(session)
                         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = ComposeColor.DarkGray)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = onRefreshClick,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = ComposeColor(0xFF2C2C2E), contentColor = ComposeColor(0xFF00F5D4)),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, ComposeColor(0xFF00F5D4))
+                ) {
+                    if (isRefreshing) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), color = ComposeColor(0xFF00F5D4), strokeWidth = 2.dp)
+                    } else {
+                        Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Xiaomi Verilerini Senkronize Et")
                     }
                 }
             }

@@ -16,7 +16,7 @@ class WorkoutPlanRepository @Inject constructor() {
     }
 
     /**
-     * Returns a specific day's workout from the Machine + Weight program.
+     * Returns a specific day's workout from the default program.
      */
     fun getWorkoutForDay(index: Int): Workout? {
         return WorkoutData.machineWeightProgram.getOrNull(index)

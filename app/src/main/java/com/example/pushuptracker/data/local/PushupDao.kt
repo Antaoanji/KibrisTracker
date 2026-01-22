@@ -7,10 +7,6 @@ import androidx.room.Query
 import com.example.pushuptracker.model.ActivityRecord
 import kotlinx.coroutines.flow.Flow
 
-/**
- * Data Access Object for all activity records.
- * Contains all necessary queries for Home, Stats, and Workout Player screens.
- */
 @Dao
 interface PushupDao {
 
@@ -19,6 +15,9 @@ interface PushupDao {
 
     @Query("SELECT * FROM activity_records WHERE date = :date AND type = 'pushup'")
     fun getRecordForDate(date: String): Flow<ActivityRecord?>
+
+    @Query("SELECT * FROM activity_records WHERE date = :date AND type = :type")
+    fun getRecordByDateAndType(date: String, type: String): Flow<ActivityRecord?>
 
     @Query("SELECT * FROM activity_records ORDER BY timestamp DESC")
     fun getAllRecords(): Flow<List<ActivityRecord>>
@@ -29,8 +28,8 @@ interface PushupDao {
     @Query("SELECT DISTINCT type FROM activity_records")
     fun getDistinctExerciseTypes(): Flow<List<String>>
 
-    @Query("SELECT * FROM activity_records WHERE type = :exerciseType ORDER BY timestamp ASC")
-    fun getAllRecordsForType(exerciseType: String): Flow<List<ActivityRecord>>
+    @Query("SELECT * FROM activity_records WHERE type = :type ORDER BY timestamp ASC")
+    fun getRecordsByType(type: String): Flow<List<ActivityRecord>>
 
     @Query("SELECT * FROM activity_records WHERE type = 'pushup'")
     fun getAllPushupRecords(): Flow<List<ActivityRecord>>

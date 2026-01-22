@@ -14,7 +14,7 @@ import com.example.pushuptracker.model.ActivityRecord
         CustomWorkoutEntity::class,
         CustomExerciseEntity::class
     ],
-    version = 9,
+    version = 10,
     exportSchema = true
 )
 @TypeConverters(DateConverter::class)
