@@ -82,9 +82,11 @@ class HealthConnectManager @Inject constructor(
                     timeRangeFilter = TimeRangeFilter.between(start, end)
                 )
             )
-
+            
             response.records.groupBy {
-                LocalDate.ofInstant(it.startTime, ZoneId.systemDefault())
+                // DÜZELTME: API 34 bağımlılığından kurtulmak için atZone kullanıldı
+                it.startTime.atZone(ZoneId.systemDefault())
+                    .toLocalDate()
                     .format(DateTimeFormatter.ISO_LOCAL_DATE)
             }.mapValues { entry ->
                 entry.value.sumOf { it.energy.inKilocalories }

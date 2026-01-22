@@ -23,13 +23,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -47,6 +44,7 @@ import com.example.pushuptracker.audio.WorkoutService
 import com.example.pushuptracker.model.Activities
 import com.example.pushuptracker.model.Streak
 import com.example.pushuptracker.model.TrackableActivity
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -143,7 +141,7 @@ fun HomeScreen(viewModel: HomeViewModel = hiltViewModel()) {
                 )
             }
 
-            updateInfo?.let { info ->
+            updateInfo?.let { _ ->
                 AlertDialog(
                     onDismissRequest = { viewModel.onUpdateDismissed() },
                     title = { Text("Güncelleme Mevcut!") },
@@ -206,7 +204,7 @@ fun WalkingActiveMenu(
                 } else {
                     val mins = state.remainingSeconds / 60
                     val secs = state.remainingSeconds % 60
-                    Text(text = String.format("%02d:%02d", mins, secs), style = MaterialTheme.typography.displayLarge, color = MaterialTheme.colorScheme.primary)
+                    Text(text = String.format(Locale.getDefault(), "%02d:%02d", mins, secs), style = MaterialTheme.typography.displayLarge, color = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.height(12.dp))
                     Surface(color = if (state.isFastMode) Color(0xFFFF5722) else Color(0xFF4CAF50), shape = RoundedCornerShape(12.dp)) {
                         Text(text = if (state.isFastMode) "🔥 HIZLI TEMPO" else "🍃 YAVAŞ TEMPO", modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp), color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp)
