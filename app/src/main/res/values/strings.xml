@@ -105,6 +105,28 @@
     <string name="badge_walk_night_title">Gece Gezgini</string>
     <string name="badge_walk_night_desc">Gece yarısı yürüyüşü tamamla</string>
 
+    <!-- LYMPHATIC (10 ADET) -->
+    <string name="badge_lymphatic_1_title">Arınma Başlasın</string>
+    <string name="badge_lymphatic_1_desc">İlk lenfatik egzersiz seansını tamamla</string>
+    <string name="badge_lymphatic_7_title">Haftalık Akış</string>
+    <string name="badge_lymphatic_7_desc">7 seans lenfatik egzersiz tamamla</string>
+    <string name="badge_lymphatic_14_title">Lenfatik Denge</string>
+    <string name="badge_lymphatic_14_desc">14 seans lenfatik egzersiz tamamla</string>
+    <string name="badge_lymphatic_30_title">Detoks Ustası</string>
+    <string name="badge_lymphatic_30_desc">30 seans boyunca vücudunu tazeledin</string>
+    <string name="badge_lymphatic_50_title">Canlandırıcı Güç</string>
+    <string name="badge_lymphatic_50_desc">50 seans lenfatik egzersiz tamamla</string>
+    <string name="badge_lymphatic_100_title">Hücresel Yenilenme</string>
+    <string name="badge_lymphatic_100_desc">100 seans! Hücrelerin sana teşekkür ediyor.</string>
+    <string name="badge_lymphatic_morning_title">Zinde Sabahlar</string>
+    <string name="badge_lymphatic_morning_desc">Egzersizi sabah 08:00\'den önce tamamla</string>
+    <string name="badge_lymphatic_streak_3_title">Üçlü Arınma</string>
+    <string name="badge_lymphatic_streak_3_desc">3 gün üst üste lenfatik egzersiz yap</string>
+    <string name="badge_lymphatic_streak_7_title">Sürekli Akış</string>
+    <string name="badge_lymphatic_streak_7_desc">7 gün boyunca vücudunu titreştirdin</string>
+    <string name="badge_lymphatic_total_70_title">Tam Koruma</string>
+    <string name="badge_lymphatic_total_70_desc">Toplamda 70 dakikalık lenfatik aktivite</string>
+
     <!-- TONAGE & WEIGHT (10 ADET) -->
     <string name="badge_ton_1_title">Hafif Sıklet</string>
     <string name="badge_ton_1_desc">Toplamda 1.000 kg kaldır</string>

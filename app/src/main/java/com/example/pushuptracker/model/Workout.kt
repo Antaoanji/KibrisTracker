@@ -18,8 +18,7 @@ data class Exercise(
     val restTimeSeconds: Int,
     val description: String,
     val imageUrl: String = "",
-    val videoUrl: String = "", // NEW: YouTube linki için
-    val metValue: Double = 3.0
+    val videoUrl: String = "" // NEW: YouTube linki için
 ) : Parcelable
 
 

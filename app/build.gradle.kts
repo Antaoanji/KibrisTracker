@@ -33,7 +33,7 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = 1
-        versionName = "2.1"
+        versionName = "2.3"
 
         testInstrumentationRunner = "com.google.dagger.hilt.android.testing.HiltTestRunner"
 

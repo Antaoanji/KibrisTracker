@@ -79,6 +79,24 @@ class GamificationManager @Inject constructor(
         val totalSquat = allRecords.filter { it.type.contains("Squat", true) }.sumOf { it.value }
         if (totalSquat >= 2000) unlock("master_squat", unlocked)
 
+        // --- NEW: LYMPHATIC MASTERY ---
+        val lymphaticRecords = allRecords.filter { it.type == "lymphatic" }
+        val totalLymphaticSessions = lymphaticRecords.size
+        if (totalLymphaticSessions >= 1) unlock("lymphatic_1", unlocked)
+        if (totalLymphaticSessions >= 7) unlock("lymphatic_7", unlocked)
+        if (totalLymphaticSessions >= 14) unlock("lymphatic_14", unlocked)
+        if (totalLymphaticSessions >= 30) unlock("lymphatic_30", unlocked)
+        if (totalLymphaticSessions >= 50) unlock("lymphatic_50", unlocked)
+        if (totalLymphaticSessions >= 100) unlock("lymphatic_100", unlocked)
+
+        val totalLymphaticMinutes = lymphaticRecords.sumOf { it.value }
+        if (totalLymphaticMinutes >= 70) unlock("lymphatic_total_70", unlocked)
+
+        val lymphaticDates = lymphaticRecords.map { it.date }.toSet()
+        val lymphaticStreak = calculateStreak(lymphaticDates)
+        if (lymphaticStreak >= 3) unlock("lymphatic_streak_3", unlocked)
+        if (lymphaticStreak >= 7) unlock("lymphatic_streak_7", unlocked)
+
         // 7. TIME & SPECIAL
         val now = LocalTime.now()
         if (now.isBefore(LocalTime.of(7, 0))) unlock("early_bird", unlocked)
@@ -95,6 +113,20 @@ class GamificationManager @Inject constructor(
         if (count >= 60) unlock("level_gold", unlocked)
         if (count >= 90) unlock("level_platinum", unlocked)
         if (count >= 100) unlock("legend", unlocked)
+    }
+
+    private fun calculateStreak(dates: Set<String>): Int {
+        if (dates.isEmpty()) return 0
+        var streak = 0
+        var currentDate = LocalDate.now()
+        if (!dates.contains(currentDate.toString())) {
+            currentDate = currentDate.minusDays(1)
+        }
+        while (dates.contains(currentDate.toString())) {
+            streak++
+            currentDate = currentDate.minusDays(1)
+        }
+        return streak
     }
 
     private suspend fun unlock(id: String, unlocked: Set<String>) {

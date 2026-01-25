@@ -23,6 +23,5 @@ data class CustomExerciseEntity(
     val description: String,
     val imageUrl: String = "",
     val videoUrl: String = "", // NEW: YouTube linki
-    val metValue: Double = 3.0,
     val orderIndex: Int
 )

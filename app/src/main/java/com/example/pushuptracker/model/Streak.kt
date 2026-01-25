@@ -9,6 +9,7 @@ data class Streak(
         PUSHUP,
         WATER,
         WORKOUT,
-        WALKING // NEW: Japon Yürüyüşü için tip eklendi
+        WALKING,
+        LYMPHATIC // NEW: Çin Lenfatik Egzersizi için tip eklendi
     }
 }

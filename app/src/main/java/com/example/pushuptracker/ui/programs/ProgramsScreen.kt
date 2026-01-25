@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -161,10 +162,16 @@ fun ProgramsScreen(
             }
 
             val days = listOf("Pazartesi (PUSH)", "Salı (PULL)", "Çarşamba (LEGS)", "Cuma (UPPER)", "Cumartesi (LOWER)")
+            val workoutTypeKeys = listOf("PUSH", "PULL", "LEGS", "UPPER", "LOWER")
+
             itemsIndexed(days) { index, dayName ->
+                // O günün antrenman tipi (örn: PUSH) tamamlanmış mı kontrol et
+                val isCompleted = uiState.completedWorkoutTypes.any { it.contains(workoutTypeKeys[index], ignoreCase = true) }
+                
                 DayWorkoutCard(
                     dayName = dayName,
                     isToday = index == todayIndex,
+                    isCompleted = isCompleted,
                     onInfoClick = {
                         selectedDayIndex = index
                         viewModel.loadWorkoutDetails(index)
@@ -191,6 +198,117 @@ fun ProgramsScreen(
                     dayIndex = selectedDayIndex,
                     onCloseSheet = { showInfoSheet = false }
                 )
+            }
+        }
+    }
+}
+
+@Composable
+fun DayWorkoutCard(
+    dayName: String, 
+    isToday: Boolean, 
+    isCompleted: Boolean, 
+    onInfoClick: () -> Unit, 
+    onStartClick: () -> Unit
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "glow")
+    val alpha by infiniteTransition.animateFloat(
+        initialValue = 0.3f,
+        targetValue = 0.8f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "alpha"
+    )
+
+    val borderModifier = if (isToday) {
+        Modifier.border(2.dp, MaterialTheme.colorScheme.primary.copy(alpha = alpha), RoundedCornerShape(16.dp))
+    } else Modifier
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(85.dp)
+            .then(borderModifier)
+            .shadow(if (isToday) 8.dp else 0.dp, RoundedCornerShape(16.dp)),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isToday) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f)
+            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Tamamlanma İkonu (Yeni)
+            if (isCompleted) {
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .background(Color(0xFF4CAF50).copy(alpha = 0.2f), CircleShape)
+                        .border(1.dp, Color(0xFF4CAF50), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = "Tamamlandı",
+                        tint = Color(0xFF4CAF50),
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+                Spacer(Modifier.width(12.dp))
+            }
+
+            Column(modifier = Modifier.weight(1f)) {
+                val split = dayName.split(" (")
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = split[0],
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = if (isToday) FontWeight.ExtraBold else FontWeight.Bold,
+                        color = if (isToday) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                    )
+                    IconButton(
+                        onClick = onInfoClick,
+                        modifier = Modifier.size(32.dp).padding(start = 4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = "Detaylar",
+                            tint = if (isToday) MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+                            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+                if (split.size > 1) {
+                    Text(
+                        text = split[1].replace(")", ""),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (isToday) MaterialTheme.colorScheme.primary.copy(alpha = 0.8f) 
+                        else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    )
+                }
+            }
+
+            // Başlat Butonu Her Zaman Aktif
+            Button(
+                onClick = onStartClick,
+                contentPadding = PaddingValues(horizontal = 12.dp),
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.height(38.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (isCompleted) Color.Gray.copy(alpha = 0.2f) else MaterialTheme.colorScheme.primary,
+                    contentColor = if (isCompleted) Color.White.copy(alpha = 0.6f) else Color.Black
+                )
+            ) {
+                Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(4.dp))
+                Text(if (isCompleted) "TEKRAR" else "BAŞLAT", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.ExtraBold)
             }
         }
     }
@@ -434,86 +552,6 @@ fun ProgramSelectCard(
                     .align(Alignment.BottomCenter)
                     .padding(8.dp)
             )
-        }
-    }
-}
-
-@Composable
-fun DayWorkoutCard(dayName: String, isToday: Boolean, onInfoClick: () -> Unit, onStartClick: () -> Unit) {
-    val infiniteTransition = rememberInfiniteTransition(label = "glow")
-    val alpha by infiniteTransition.animateFloat(
-        initialValue = 0.3f,
-        targetValue = 0.8f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1000),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "alpha"
-    )
-
-    val borderModifier = if (isToday) {
-        Modifier.border(2.dp, MaterialTheme.colorScheme.primary.copy(alpha = alpha), RoundedCornerShape(16.dp))
-    } else Modifier
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(80.dp)
-            .then(borderModifier)
-            .shadow(if (isToday) 8.dp else 0.dp, RoundedCornerShape(16.dp)),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isToday) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-        )
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                val split = dayName.split(" (")
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = split[0],
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = if (isToday) FontWeight.ExtraBold else FontWeight.Bold,
-                        color = if (isToday) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                    )
-                    IconButton(
-                        onClick = onInfoClick,
-                        modifier = Modifier.size(32.dp).padding(start = 4.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Info,
-                            contentDescription = "Detaylar",
-                            tint = if (isToday) MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
-                            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
-                if (split.size > 1) {
-                    Text(
-                        text = split[1].replace(")", ""),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (isToday) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
-                    )
-                }
-            }
-
-            Button(
-                onClick = onStartClick,
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                shape = RoundedCornerShape(8.dp),
-                modifier = Modifier.height(36.dp)
-            ) {
-                Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(4.dp))
-                Text("BAŞLAT", style = MaterialTheme.typography.labelLarge)
-            }
         }
     }
 }

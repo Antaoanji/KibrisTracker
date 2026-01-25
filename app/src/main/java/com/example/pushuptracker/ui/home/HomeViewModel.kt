@@ -11,8 +11,10 @@ import com.example.pushuptracker.ai.PushupSensorManager
 import com.example.pushuptracker.audio.WorkoutService
 import com.example.pushuptracker.data.repo.PushupRepo
 import com.example.pushuptracker.data.repo.WaterRepo
+import com.example.pushuptracker.gamification.GamificationManager
 import com.example.pushuptracker.model.ActivityRecord
 import com.example.pushuptracker.model.Streak
+import com.example.pushuptracker.model.WorkoutSummary
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -31,7 +33,8 @@ class HomeViewModel @Inject constructor(
     private val waterRepo: WaterRepo,
     private val settingsManager: SettingsManager,
     private val pushupSensorManager: PushupSensorManager,
-    private val updateManager: UpdateManager
+    private val updateManager: UpdateManager,
+    private val gamificationManager: GamificationManager
 ) : AndroidViewModel(application) {
 
     private val today: String get() = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
@@ -88,20 +91,37 @@ class HomeViewModel @Inject constructor(
         Pair(todayWalking, allWalking)
     }
 
-    val homeScreenState = combine(
+    private val lymphaticDataFlow = combine(
+        pushupRepo.getRecordByDateAndType(today, "lymphatic"),
+        pushupRepo.getRecordsByType("lymphatic")
+    ) { todayLymphatic, allLymphatic ->
+        Pair(todayLymphatic, allLymphatic)
+    }
+
+    // Combine activity flows into one to stay under the 5-flow limit of the standard combine function
+    private val combinedActivitiesFlow = combine(
         pushupDataFlow,
         waterDataFlow,
         walkingDataFlow,
+        lymphaticDataFlow
+    ) { pushup, water, walking, lymphatic ->
+        ActivitiesBundle(pushup, water, walking, lymphatic)
+    }
+
+    val homeScreenState = combine(
+        combinedActivitiesFlow,
         settingsManager.currentStreakFlow,
         settingsManager.lastWorkoutSummaryFlow
-    ) { pushupData, waterData, walkingData, workoutStreak, lastWorkoutSummary ->
-        val (todayPushups, allPushups, dailyPushupGoal) = pushupData
-        val (todayWater, allWater, dailyWaterGoal) = waterData
-        val (todayWalking, allWalking) = walkingData
+    ) { bundle, workoutStreak, lastWorkoutSummary ->
+        val (todayPushups, allPushups, dailyPushupGoal) = bundle.pushup
+        val (todayWater, allWater, dailyWaterGoal) = bundle.water
+        val (todayWalking, allWalking) = bundle.walking
+        val (todayLymphatic, allLymphatic) = bundle.lymphatic
 
         val achievedPushupDates = allPushups.filter { it.value >= dailyPushupGoal }.map { it.date }.toSet()
         val achievedWaterDates = allWater.filter { it.value >= dailyWaterGoal }.map { it.date }.toSet()
         val achievedWalkingDates = allWalking.filter { it.value >= 33.0 }.map { it.date }.toSet()
+        val achievedLymphaticDates = allLymphatic.filter { it.value >= 7.0 }.map { it.date }.toSet()
 
         val pushupStreakData = Streak(
             count = calculateCurrentStreak(achievedPushupDates, isDaily = true),
@@ -121,6 +141,12 @@ class HomeViewModel @Inject constructor(
             type = Streak.Type.WALKING
         )
 
+        val lymphaticStreakData = Streak(
+            count = calculateCurrentStreak(achievedLymphaticDates, isDaily = true),
+            isCompletedToday = (todayLymphatic?.value ?: 0.0) >= 7.0,
+            type = Streak.Type.LYMPHATIC
+        )
+
         val wasWorkoutCompletedToday = if (lastWorkoutSummary != null) {
             val lastWorkoutDate = Instant.ofEpochMilli(lastWorkoutSummary.timestamp)
                 .atZone(ZoneId.systemDefault())
@@ -137,7 +163,7 @@ class HomeViewModel @Inject constructor(
         )
 
         HomeScreenState(
-            streaks = listOf(pushupStreakData, waterStreakData, walkingStreakData, workoutStreakData)
+            streaks = listOf(pushupStreakData, waterStreakData, walkingStreakData, lymphaticStreakData, workoutStreakData)
         )
 
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), HomeScreenState())
@@ -147,6 +173,14 @@ class HomeViewModel @Inject constructor(
             action = "START_WALKING"
             putExtra("is_walking", true)
             putExtra("label", "Japon Yürüyüşü")
+        }
+        getApplication<Application>().startForegroundService(intent)
+    }
+
+    fun startLymphaticWorkout() {
+        val intent = Intent(getApplication(), WorkoutService::class.java).apply {
+            action = "START_LYMPHATIC"
+            putExtra("label", "Çin Lenfatik Egzersizi")
         }
         getApplication<Application>().startForegroundService(intent)
     }
@@ -193,6 +227,7 @@ class HomeViewModel @Inject constructor(
             "pushups" -> pushupRepo.getRecordForDate(today)
             "water" -> waterRepo.getRecordForDate(today)
             "walking" -> pushupRepo.getRecordByDateAndType(today, "walking")
+            "lymphatic" -> pushupRepo.getRecordByDateAndType(today, "lymphatic")
             else -> flowOf(null)
         }
     }
@@ -202,6 +237,7 @@ class HomeViewModel @Inject constructor(
             "pushups" -> pushupRepo.getRecordForDate(yesterday)
             "water" -> waterRepo.getRecordForDate(yesterday)
             "walking" -> pushupRepo.getRecordByDateAndType(yesterday, "walking")
+            "lymphatic" -> pushupRepo.getRecordByDateAndType(yesterday, "lymphatic")
             else -> flowOf(null)
         }
     }
@@ -211,6 +247,7 @@ class HomeViewModel @Inject constructor(
             "pushups" -> pushupRepo.getAllPushupRecords().map { records -> records.sumOf { it.value } }
             "water" -> waterRepo.getAllRecords().map { records -> records.sumOf { it.value } }
             "walking" -> pushupRepo.getRecordsByType("walking").map { list -> list.sumOf { it.value } }
+            "lymphatic" -> pushupRepo.getRecordsByType("lymphatic").map { list -> list.sumOf { it.value } }
             else -> flowOf(0.0)
         }
     }
@@ -220,6 +257,7 @@ class HomeViewModel @Inject constructor(
             "pushups" -> settingsManager.dailyGoalFlow
             "water" -> settingsManager.dailyWaterGoalFlow
             "walking" -> flowOf(33)
+            "lymphatic" -> flowOf(7)
             else -> flowOf(0)
         }
     }
@@ -243,7 +281,13 @@ class HomeViewModel @Inject constructor(
                     val isGoalReachedNow = newRecord.value >= goal
                     onGoalReached(!wasGoalReachedBefore && isGoalReachedNow)
                 }
+                "lymphatic" -> {
+                    val record = ActivityRecord(type = "lymphatic", value = value, date = today, timestamp = System.currentTimeMillis())
+                    pushupRepo.insertRecord(record)
+                    onGoalReached(value >= 7.0)
+                }
             }
+            gamificationManager.checkAndUnlockAchievements()
         }
     }
 
@@ -280,4 +324,11 @@ class HomeViewModel @Inject constructor(
 
 data class HomeScreenState(
     val streaks: List<Streak> = emptyList()
+)
+
+data class ActivitiesBundle(
+    val pushup: Triple<ActivityRecord?, List<ActivityRecord>, Int>,
+    val water: Triple<ActivityRecord?, List<ActivityRecord>, Int>,
+    val walking: Pair<ActivityRecord?, List<ActivityRecord>>,
+    val lymphatic: Pair<ActivityRecord?, List<ActivityRecord>>
 )

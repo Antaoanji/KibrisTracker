@@ -3,30 +3,34 @@ package com.example.pushuptracker.ui.programs
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.pushuptracker.SettingsManager
+import com.example.pushuptracker.data.HealthConnectManager
 import com.example.pushuptracker.data.repo.CustomWorkoutRepository
+import com.example.pushuptracker.data.repo.PushupRepo
 import com.example.pushuptracker.di.WorkoutHolder
 import com.example.pushuptracker.model.Workout
 import com.example.pushuptracker.model.WorkoutSummary
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import java.time.DayOfWeek
+import java.time.Instant
 import java.time.LocalDate
+import java.time.temporal.TemporalAdjusters
+import java.util.Locale
 import javax.inject.Inject
 
 enum class ProgramType {
     MACHINE_WEIGHT, CALISTHENICS_WEIGHT
 }
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class ProgramsViewModel @Inject constructor(
     private val settingsManager: SettingsManager,
     private val customWorkoutRepository: CustomWorkoutRepository,
+    private val pushupRepo: PushupRepo,
+    private val healthConnectManager: HealthConnectManager,
     val workoutHolder: WorkoutHolder
 ) : ViewModel() {
 
@@ -36,15 +40,45 @@ class ProgramsViewModel @Inject constructor(
     private val _workoutDetails = MutableStateFlow<Workout?>(null)
     val workoutDetails = _workoutDetails.asStateFlow()
 
+    // Haftalık tamamlanan antrenmanları takip et
+    private val completedWorkoutsThisWeek: Flow<Set<String>> = pushupRepo.getAllRecords().map { records ->
+        val monday = LocalDate.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+        records.filter { 
+            try {
+                val date = LocalDate.parse(it.date)
+                !date.isBefore(monday) 
+            } catch (e: Exception) { false }
+        }.map { it.type.uppercase(Locale.getDefault()) }.toSet() // Hepsi büyük harf yapıldı
+    }
+
+    // Health Connect'ten gelen son antrenman kalorisini tutan akış
+    private val lastWorkoutRealCalories = settingsManager.lastWorkoutSummaryFlow.flatMapLatest { summary ->
+        if (summary == null) return@flatMapLatest flowOf(0)
+        
+        flow {
+            if (healthConnectManager.hasAllPermissions()) {
+                val endTime = Instant.ofEpochMilli(summary.timestamp)
+                val startTime = endTime.minusSeconds(summary.totalTimeMinutes.toLong() * 60)
+                val calories = healthConnectManager.readTotalCalories(startTime, endTime)
+                emit(calories.toInt())
+            } else {
+                emit(summary.caloriesBurned)
+            }
+        }
+    }
+
     val uiState: StateFlow<ProgramScreenUiState> = combine(
         settingsManager.activeWorkoutCurrentDayFlow,
         settingsManager.lastWorkoutSummaryFlow,
-        _selectedProgram
-    ) { currentDay, summary, program ->
+        _selectedProgram,
+        completedWorkoutsThisWeek,
+        lastWorkoutRealCalories
+    ) { currentDay, summary, program, completedTitles, realCalories ->
         ProgramScreenUiState(
             currentDay = currentDay,
-            lastWorkoutSummary = summary,
-            selectedProgram = program
+            lastWorkoutSummary = summary?.copy(caloriesBurned = realCalories),
+            selectedProgram = program,
+            completedWorkoutTypes = completedTitles // Artık büyük harf setleri geliyor
         )
     }.stateIn(
         scope = viewModelScope,
@@ -86,11 +120,11 @@ class ProgramsViewModel @Inject constructor(
 
     private fun getTodayIndex(): Int {
         return when (LocalDate.now().dayOfWeek) {
-            java.time.DayOfWeek.MONDAY -> 0
-            java.time.DayOfWeek.TUESDAY -> 1
-            java.time.DayOfWeek.WEDNESDAY -> 2
-            java.time.DayOfWeek.FRIDAY -> 3
-            java.time.DayOfWeek.SATURDAY -> 4
+            DayOfWeek.MONDAY -> 0
+            DayOfWeek.TUESDAY -> 1
+            DayOfWeek.WEDNESDAY -> 2
+            DayOfWeek.FRIDAY -> 3
+            DayOfWeek.SATURDAY -> 4
             else -> -1
         }
     }
@@ -141,7 +175,6 @@ class ProgramsViewModel @Inject constructor(
         }
     }
 
-    // UPDATED: Reset specific program types
     fun resetPrograms(types: List<ProgramType>) {
         viewModelScope.launch {
             _eventState.update { it.copy(isLoading = true) }
@@ -161,7 +194,8 @@ data class ProgramScreenUiState(
     val isLoading: Boolean = false,
     val lastWorkoutSummary: WorkoutSummary? = null,
     val currentDay: Int = 1,
-    val selectedProgram: ProgramType = ProgramType.MACHINE_WEIGHT
+    val selectedProgram: ProgramType = ProgramType.MACHINE_WEIGHT,
+    val completedWorkoutTypes: Set<String> = emptySet()
 )
 
 data class ProgramEventState(

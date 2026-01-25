@@ -4,6 +4,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
+import android.net.Uri
 import android.os.IBinder
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
@@ -53,17 +54,18 @@ fun HomeScreen(viewModel: HomeViewModel = hiltViewModel()) {
     val updateInfo by viewModel.updateInfo.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
-    var walkingService by remember { mutableStateOf<WorkoutService?>(null) }
-    val walkingState = walkingService?.walkingState?.collectAsStateWithLifecycle()
+    var workoutService by remember { mutableStateOf<WorkoutService?>(null) }
+    val walkingState = workoutService?.walkingState?.collectAsStateWithLifecycle()
+    val lymphaticState = workoutService?.lymphaticState?.collectAsStateWithLifecycle()
 
     val connection = remember {
         object : ServiceConnection {
             override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
                 val binder = service as WorkoutService.WorkoutBinder
-                walkingService = binder.getService()
+                workoutService = binder.getService()
             }
             override fun onServiceDisconnected(name: ComponentName?) {
-                walkingService = null
+                workoutService = null
             }
         }
     }
@@ -77,6 +79,7 @@ fun HomeScreen(viewModel: HomeViewModel = hiltViewModel()) {
     var showAutoTracker by remember { mutableStateOf(false) }
     var showCelebration by remember { mutableStateOf(false) }
     var showWalkingMenu by remember { mutableStateOf(false) }
+    var showLymphaticMenu by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -99,7 +102,8 @@ fun HomeScreen(viewModel: HomeViewModel = hiltViewModel()) {
                                 Streak.Type.PUSHUP -> 0
                                 Streak.Type.WATER -> 1
                                 Streak.Type.WALKING -> 2
-                                Streak.Type.WORKOUT -> 3
+                                Streak.Type.LYMPHATIC -> 3
+                                Streak.Type.WORKOUT -> 4
                             }
                         }.forEach { streak ->
                             StreakIcon(streak = streak)
@@ -121,8 +125,11 @@ fun HomeScreen(viewModel: HomeViewModel = hiltViewModel()) {
                         viewModel = viewModel, 
                         activity = activity, 
                         onAddClick = { 
-                            if (activity.id == "walking") showWalkingMenu = true 
-                            else showAddDialog = activity 
+                            when (activity.id) {
+                                "walking" -> showWalkingMenu = true
+                                "lymphatic" -> showLymphaticMenu = true
+                                else -> showAddDialog = activity
+                            }
                         },
                         onAutoTrackClick = { if(activity.id == "pushups") showAutoTracker = true }
                     )
@@ -137,6 +144,19 @@ fun HomeScreen(viewModel: HomeViewModel = hiltViewModel()) {
                     onPause = { context.startService(Intent(context, WorkoutService::class.java).apply { action = "PAUSE" }) },
                     onResume = { context.startService(Intent(context, WorkoutService::class.java).apply { action = "RESUME" }) },
                     onStop = { context.startService(Intent(context, WorkoutService::class.java).apply { action = "STOP" }) },
+                    onCancel = { context.startService(Intent(context, WorkoutService::class.java).apply { action = "CANCEL" }) }
+                )
+            }
+
+            if (showLymphaticMenu) {
+                LymphaticActiveMenu(
+                    state = lymphaticState?.value,
+                    onDismiss = { showLymphaticMenu = false },
+                    onStart = { viewModel.startLymphaticWorkout() },
+                    onPause = { context.startService(Intent(context, WorkoutService::class.java).apply { action = "PAUSE" }) },
+                    onResume = { context.startService(Intent(context, WorkoutService::class.java).apply { action = "RESUME" }) },
+                    onStop = { context.startService(Intent(context, WorkoutService::class.java).apply { action = "STOP" }) },
+                    onSkip = { context.startService(Intent(context, WorkoutService::class.java).apply { action = "SKIP_LYMPHATIC" }) },
                     onCancel = { context.startService(Intent(context, WorkoutService::class.java).apply { action = "CANCEL" }) }
                 )
             }
@@ -230,6 +250,84 @@ fun WalkingActiveMenu(
 }
 
 @Composable
+fun LymphaticActiveMenu(
+    state: WorkoutService.LymphaticState?,
+    onDismiss: () -> Unit,
+    onStart: () -> Unit,
+    onPause: () -> Unit,
+    onResume: () -> Unit,
+    onStop: () -> Unit,
+    onSkip: () -> Unit,
+    onCancel: () -> Unit
+) {
+    val context = LocalContext.current
+    val videoUrl = "https://www.tiktok.com/@julius.rogonja/video/7538470302687169814"
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { 
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Spa, contentDescription = null, tint = Color(0xFF9C27B0))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Lenfatik Akış", fontWeight = FontWeight.Bold)
+                }
+                
+                // Info butonu artık her zaman orada
+                IconButton(onClick = {
+                    if (state != null && !state.isPaused) onPause()
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(videoUrl))
+                    context.startActivity(intent)
+                }) {
+                    Icon(
+                        imageVector = Icons.Default.Info, 
+                        contentDescription = "Nasıl Yapılır?", 
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+            }
+        },
+        text = {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                if (state == null) {
+                    Text("7 Dakikalık lenfatik drenaj döngüsüne hazır mısın?", textAlign = TextAlign.Center)
+                    Spacer(Modifier.height(8.dp))
+                    Text("• 7 Farklı Hareket\n• Her biri 1 dakika", style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
+                } else {
+                    Text(text = state.movementName, style = MaterialTheme.typography.headlineMedium, color = Color(0xFF9C27B0), fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                    Spacer(Modifier.height(8.dp))
+                    val mins = state.remainingSeconds / 60
+                    val secs = state.remainingSeconds % 60
+                    Text(text = String.format(Locale.getDefault(), "%02d:%02d", mins, secs), style = MaterialTheme.typography.displayLarge, color = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.height(12.dp))
+                    Text(text = state.movementDescription, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
+                    if (state.isPaused) Text("DURAKLATILDI", color = Color.Red, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
+                }
+            }
+        },
+        confirmButton = {
+            if (state == null) { Button(onClick = onStart, modifier = Modifier.fillMaxWidth()) { Text("BAŞLAT") } }
+            else {
+                Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (state.isPaused) Button(onClick = onResume, modifier = Modifier.weight(1f)) { Text("DEVAM") }
+                        else OutlinedButton(onClick = onPause, modifier = Modifier.weight(1f)) { Text("DURAKLAT") }
+                        Button(onClick = onSkip, modifier = Modifier.weight(1f)) { Text("ATLA") }
+                    }
+                    Button(onClick = onStop, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))) { Text("BİTİR") }
+                    TextButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) { Text("İPTAL ET", color = Color.Gray) }
+                }
+            }
+        }
+    )
+}
+
+@Composable
 fun ActivityCard(viewModel: HomeViewModel, activity: TrackableActivity, onAddClick: () -> Unit, onAutoTrackClick: () -> Unit) {
     val todayRecord by viewModel.getTodayRecord(activity.id).collectAsStateWithLifecycle(null)
     val yesterdayRecord by viewModel.getYesterdayRecord(activity.id).collectAsStateWithLifecycle(null)
@@ -246,7 +344,11 @@ fun ActivityCard(viewModel: HomeViewModel, activity: TrackableActivity, onAddCli
                 Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.2f)))
                 Row(modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp)) {
                     if (activity.id == "pushups") FloatingActionButton(onClick = onAutoTrackClick, modifier = Modifier.padding(end = 8.dp), shape = CircleShape, containerColor = MaterialTheme.colorScheme.secondary) { Icon(Icons.Default.TouchApp, null) }
-                    FloatingActionButton(onClick = onAddClick, shape = CircleShape, containerColor = if(activity.id == "walking") MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary) { Icon(if(activity.id == "walking") Icons.Default.PlayArrow else Icons.Default.Add, null) }
+                    FloatingActionButton(onClick = onAddClick, shape = CircleShape, containerColor = when(activity.id) {
+                        "walking" -> MaterialTheme.colorScheme.tertiary
+                        "lymphatic" -> Color(0xFF9C27B0)
+                        else -> MaterialTheme.colorScheme.primary
+                    }) { Icon(if(activity.id == "walking" || activity.id == "lymphatic") Icons.Default.PlayArrow else Icons.Default.Add, null) }
                 }
             }
 
@@ -319,6 +421,7 @@ fun StreakIcon(streak: Streak) {
             Streak.Type.PUSHUP -> LottieCompositionSpec.RawRes(R.raw.redfire)
             Streak.Type.WATER -> LottieCompositionSpec.RawRes(R.raw.bluefire)
             Streak.Type.WALKING -> LottieCompositionSpec.RawRes(R.raw.yellowfire)
+            Streak.Type.LYMPHATIC -> LottieCompositionSpec.RawRes(R.raw.purplefire)
             Streak.Type.WORKOUT -> LottieCompositionSpec.RawRes(R.raw.greenfire)
         }
     )

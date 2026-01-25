@@ -1,6 +1,10 @@
 package com.example.pushuptracker.audio
 
 import android.content.Context
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
+import android.os.Build
 import android.speech.tts.TextToSpeech
 import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -16,6 +20,8 @@ class AudioCoach @Inject constructor(
 
     private var tts: TextToSpeech? = null
     private var isInitialized = false
+    private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    private var audioFocusRequest: AudioFocusRequest? = null
 
     init {
         try {
@@ -38,30 +44,71 @@ class AudioCoach @Inject constructor(
         }
     }
 
+    /**
+     * Ses odağını talep eder. Diğer medya seslerini durdurur.
+     */
+    private fun requestFocus(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val attributes = AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION) // Daha uyumlu sabit kullanıldı
+                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                .build()
+
+            audioFocusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+                .setAudioAttributes(attributes)
+                .setAcceptsDelayedFocusGain(true)
+                .setOnAudioFocusChangeListener { /* No-op */ }
+                .build()
+
+            audioManager.requestAudioFocus(audioFocusRequest!!) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+        } else {
+            @Suppress("DEPRECATION")
+            audioManager.requestAudioFocus(null, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+        }
+    }
+
+    /**
+     * Ses odağını bırakır. Diğer medya sesleri devam eder.
+     */
+    private fun abandonFocus() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            audioFocusRequest?.let { audioManager.abandonAudioFocusRequest(it) }
+        } else {
+            @Suppress("DEPRECATION")
+            audioManager.abandonAudioFocus(null)
+        }
+    }
+
     fun announceExercise(text: String) {
         if (isInitialized) {
+            requestFocus()
             tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "announcement")
         }
     }
 
     suspend fun playCountdown() {
         if (isInitialized) {
-            // Flush any current speech to ensure countdown is immediate
-            tts?.speak("3", TextToSpeech.QUEUE_FLUSH, null, "3")
-            delay(1000)
-            tts?.speak("2", TextToSpeech.QUEUE_FLUSH, null, "2")
-            delay(1000)
-            tts?.speak("1", TextToSpeech.QUEUE_FLUSH, null, "1")
+            if (requestFocus()) {
+                tts?.speak("3", TextToSpeech.QUEUE_FLUSH, null, "3")
+                delay(1000)
+                tts?.speak("2", TextToSpeech.QUEUE_FLUSH, null, "2")
+                delay(1000)
+                tts?.speak("1", TextToSpeech.QUEUE_FLUSH, null, "1")
+                delay(1000)
+                abandonFocus() // Sayma bitince müziği geri aç
+            }
         }
     }
 
     fun stop() {
         tts?.stop()
+        abandonFocus()
     }
 
     fun shutdown() {
         tts?.stop()
         tts?.shutdown()
+        abandonFocus()
         isInitialized = false
     }
 }

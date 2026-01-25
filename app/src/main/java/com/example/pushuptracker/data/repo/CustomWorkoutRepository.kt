@@ -95,7 +95,6 @@ class CustomWorkoutRepository @Inject constructor(
         description = description,
         imageUrl = imageUrl,
         videoUrl = videoUrl,
-        metValue = metValue,
         orderIndex = order
     )
 
@@ -107,7 +106,6 @@ class CustomWorkoutRepository @Inject constructor(
         restTimeSeconds = restTimeSeconds,
         description = description,
         imageUrl = imageUrl,
-        videoUrl = videoUrl,
-        metValue = metValue
+        videoUrl = videoUrl
     )
 }

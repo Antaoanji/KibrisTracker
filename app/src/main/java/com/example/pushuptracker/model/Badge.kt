@@ -67,6 +67,18 @@ data class Badge(
             Badge("walk_morning", R.string.badge_walk_morning_title, R.string.badge_walk_morning_desc, Icons.Default.LightMode, Color(0xFFFFEB3B)),
             Badge("walk_night", R.string.badge_walk_night_title, R.string.badge_walk_night_desc, Icons.Default.DarkMode, Color(0xFF3F51B5)),
 
+            // --- LYMPHATIC (10 ADET) ---
+            Badge("lymphatic_1", R.string.badge_lymphatic_1_title, R.string.badge_lymphatic_1_desc, Icons.Default.Spa, Color(0xFFE1BEE7)),
+            Badge("lymphatic_7", R.string.badge_lymphatic_7_title, R.string.badge_lymphatic_7_desc, Icons.Default.Spa, Color(0xFFCE93D8)),
+            Badge("lymphatic_14", R.string.badge_lymphatic_14_title, R.string.badge_lymphatic_14_desc, Icons.Default.Spa, Color(0xFFBA68C8)),
+            Badge("lymphatic_30", R.string.badge_lymphatic_30_title, R.string.badge_lymphatic_30_desc, Icons.Default.Healing, Color(0xFFAB47BC)),
+            Badge("lymphatic_50", R.string.badge_lymphatic_50_title, R.string.badge_lymphatic_50_desc, Icons.Default.Healing, Color(0xFF9C27B0)),
+            Badge("lymphatic_100", R.string.badge_lymphatic_100_title, R.string.badge_lymphatic_100_desc, Icons.Default.AutoAwesome, Color(0xFF8E24AA)),
+            Badge("lymphatic_morning", R.string.badge_lymphatic_morning_title, R.string.badge_lymphatic_morning_desc, Icons.Default.LightMode, Color(0xFF7B1FA2)),
+            Badge("lymphatic_streak_3", R.string.badge_lymphatic_streak_3_title, R.string.badge_lymphatic_streak_3_desc, Icons.Default.Whatshot, Color(0xFF6A1B9A)),
+            Badge("lymphatic_streak_7", R.string.badge_lymphatic_streak_7_title, R.string.badge_lymphatic_streak_7_desc, Icons.Default.Whatshot, Color(0xFF4A148C)),
+            Badge("lymphatic_total_70", R.string.badge_lymphatic_total_70_title, R.string.badge_lymphatic_total_70_desc, Icons.Default.Timer, Color(0xFFEA80FC)),
+
             // --- TONAGE & WEIGHT (10 ADET) ---
             Badge("ton_1", R.string.badge_ton_1_title, R.string.badge_ton_1_desc, Icons.Default.FitnessCenter, Color(0xFFCFD8DC)),
             Badge("ton_5", R.string.badge_ton_5_title, R.string.badge_ton_5_desc, Icons.Default.FitnessCenter, Color(0xFFB0BEC5)),

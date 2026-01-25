@@ -29,9 +29,18 @@ object Activities {
         imageRes = R.drawable.walk_main,
         iconRes = R.drawable.logo,
         unit = "dk",
-        alignment = Alignment.TopCenter // Yüzün görünmesi için yukarı hizalandı
+        alignment = Alignment.TopCenter
     )
 
-    val allActivities = listOf(PUSHUPS, WATER, WALKING)
+    val LYMPHATIC = TrackableActivity(
+        id = "lymphatic",
+        name = "Çin Lenfatik Egzersizi",
+        imageRes = R.drawable.chinese_main,
+        iconRes = R.drawable.logo,
+        unit = "dk",
+        alignment = Alignment.TopCenter // Suratın görünmesi için yukarı hizalandı
+    )
+
+    val allActivities = listOf(PUSHUPS, WATER, WALKING, LYMPHATIC)
 
 }

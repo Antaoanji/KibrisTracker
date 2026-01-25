@@ -2,11 +2,11 @@
   "formatVersion": 1,
   "database": {
     "version": 10,
-    "identityHash": "6cafddbb09c5d756e45b07f4c9edfc9a",
+    "identityHash": "2576798d30e698a9d15ea4ea2287f6af",
     "entities": [
       {
         "tableName": "activity_records",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `type` TEXT NOT NULL, `value` REAL NOT NULL, `date` TEXT NOT NULL, `weightUsed` REAL, `note` TEXT, `timestamp` INTEGER NOT NULL, `difficulty` TEXT NOT NULL)",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `type` TEXT NOT NULL, `value` REAL NOT NULL, `date` TEXT NOT NULL, `weightUsed` REAL, `note` TEXT, `timestamp` INTEGER NOT NULL, `difficulty` TEXT NOT NULL, `barWeight` REAL, `plates` TEXT, `machineMode` TEXT, `machineLevel` INTEGER)",
         "fields": [
           {
             "fieldPath": "id",
@@ -55,6 +55,30 @@
             "columnName": "difficulty",
             "affinity": "TEXT",
             "notNull": true
+          },
+          {
+            "fieldPath": "barWeight",
+            "columnName": "barWeight",
+            "affinity": "REAL",
+            "notNull": false
+          },
+          {
+            "fieldPath": "plates",
+            "columnName": "plates",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "machineMode",
+            "columnName": "machineMode",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "machineLevel",
+            "columnName": "machineLevel",
+            "affinity": "INTEGER",
+            "notNull": false
           }
         ],
         "primaryKey": {
@@ -117,7 +141,7 @@
       },
       {
         "tableName": "custom_exercises",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `workoutId` INTEGER NOT NULL, `name` TEXT NOT NULL, `searchKey` TEXT NOT NULL, `sets` INTEGER NOT NULL, `reps` TEXT NOT NULL, `restTimeSeconds` INTEGER NOT NULL, `description` TEXT NOT NULL, `imageUrl` TEXT NOT NULL, `videoUrl` TEXT NOT NULL, `metValue` REAL NOT NULL, `orderIndex` INTEGER NOT NULL)",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `workoutId` INTEGER NOT NULL, `name` TEXT NOT NULL, `searchKey` TEXT NOT NULL, `sets` INTEGER NOT NULL, `reps` TEXT NOT NULL, `restTimeSeconds` INTEGER NOT NULL, `description` TEXT NOT NULL, `imageUrl` TEXT NOT NULL, `videoUrl` TEXT NOT NULL, `orderIndex` INTEGER NOT NULL)",
         "fields": [
           {
             "fieldPath": "id",
@@ -180,12 +204,6 @@
             "notNull": true
           },
           {
-            "fieldPath": "metValue",
-            "columnName": "metValue",
-            "affinity": "REAL",
-            "notNull": true
-          },
-          {
             "fieldPath": "orderIndex",
             "columnName": "orderIndex",
             "affinity": "INTEGER",
@@ -205,7 +223,7 @@
     "views": [],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '6cafddbb09c5d756e45b07f4c9edfc9a')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '2576798d30e698a9d15ea4ea2287f6af')"
     ]
   }
 }
