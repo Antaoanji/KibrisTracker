@@ -11,7 +11,6 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.pushuptracker.SettingsManager
 import com.example.pushuptracker.audio.AudioCoach
-import com.example.pushuptracker.audio.VoiceCommandManager
 import com.example.pushuptracker.audio.WorkoutService
 import com.example.pushuptracker.data.local.WorkoutRecordDao
 import com.example.pushuptracker.data.repo.PushupRepo
@@ -42,17 +41,16 @@ sealed class WorkoutState {
         val currentSet: Int,
         val totalExercises: Int,
         val currentExerciseIndex: Int,
-        val historyHint: String?,
         val coachSuggestion: String?,
         val remainingExerciseTime: Int? = null,
-        val isTimerPaused: Boolean = false,
-        val isPreparing: Boolean = false
+        val isTimerPaused: Boolean = false
     ) : WorkoutState()
     data class Resting(val nextExercise: Exercise, val nextSet: Int, val remainingTime: Int, val initialDuration: Int) : WorkoutState()
     data class Finished(
         val totalTimeMinutes: Int,
         val totalVolume: Double,
-        val dominantDifficulty: String
+        val dominantDifficulty: String,
+        val workoutTitle: String
     ) : WorkoutState()
 }
 
@@ -64,8 +62,7 @@ class WorkoutPlayerViewModel @Inject constructor(
     private val audioCoach: AudioCoach,
     private val pushupRepo: PushupRepo,
     private val workoutRecordDao: WorkoutRecordDao,
-    private val gamificationManager: GamificationManager,
-    private val voiceCommandManager: VoiceCommandManager
+    private val gamificationManager: GamificationManager
 ) : AndroidViewModel(application) {
 
     private val audioManager = application.getSystemService(Context.AUDIO_SERVICE) as AudioManager
@@ -99,46 +96,6 @@ class WorkoutPlayerViewModel @Inject constructor(
 
     init {
         loadStateAndStart()
-        startVoiceCommandMonitoring()
-    }
-
-    private fun startVoiceCommandMonitoring() {
-        viewModelScope.launch {
-            voiceCommandManager.startListening()
-            voiceCommandManager.commandFlow.collect { command ->
-                when {
-                    command == "easy" || command == "medium" || command == "hard" -> {
-                        val state = _workoutState.value
-                        if (state is WorkoutState.InProgress) {
-                            onSetFinished(command, "Sesli Komut", null)
-                        }
-                    }
-                    command == "finish" -> {
-                        val state = _workoutState.value
-                        if (state is WorkoutState.InProgress) {
-                            onSetFinished("medium", "Sesli Komut (Tamam)", null)
-                        }
-                    }
-                    command == "skip" -> {
-                        val state = _workoutState.value
-                        if (state is WorkoutState.Resting) {
-                            skipRest()
-                        }
-                    }
-                    // MEDIA COMMANDS
-                    command == "media_pause" -> sendMediaKey(KeyEvent.KEYCODE_MEDIA_PAUSE)
-                    command == "media_play" -> sendMediaKey(KeyEvent.KEYCODE_MEDIA_PLAY)
-                    command == "media_next" -> sendMediaKey(KeyEvent.KEYCODE_MEDIA_NEXT)
-                    command == "media_prev" -> sendMediaKey(KeyEvent.KEYCODE_MEDIA_PREVIOUS)
-                    command.startsWith("media_forward_") -> {
-                        sendMediaKey(KeyEvent.KEYCODE_MEDIA_FAST_FORWARD)
-                    }
-                    command.startsWith("media_backward_") -> {
-                        sendMediaKey(KeyEvent.KEYCODE_MEDIA_REWIND)
-                    }
-                }
-            }
-        }
     }
 
     private fun sendMediaKey(keyCode: Int) {
@@ -192,7 +149,6 @@ class WorkoutPlayerViewModel @Inject constructor(
     }
 
     private fun calculateTotal(currentCategory: ExerciseCategory? = null) {
-        val category = currentCategory ?: (workoutState.value as? WorkoutState.InProgress)?.category
         val bar = _selectedBarWeight.value
         val platesSum = _selectedPlates.value.sum()
         _totalCalculatedWeight.value = bar + platesSum
@@ -330,7 +286,7 @@ class WorkoutPlayerViewModel @Inject constructor(
         if (currentState is WorkoutState.InProgress) {
             val initialTime = parseExerciseTime(currentState.exercise.reps)
             if (initialTime != null) {
-                _workoutState.value = currentState.copy(remainingExerciseTime = initialTime, isTimerPaused = false, isPreparing = false)
+                _workoutState.value = currentState.copy(remainingExerciseTime = initialTime, isTimerPaused = false)
                 startExerciseTimer(initialTime)
             }
         }
@@ -358,14 +314,14 @@ class WorkoutPlayerViewModel @Inject constructor(
     }
 
     private fun finishWorkout(isPlanFinished: Boolean) {
-        voiceCommandManager.stopListening()
         val stopIntent = Intent(getApplication(), WorkoutService::class.java).apply { action = "STOP" }
         getApplication<Application>().startService(stopIntent)
 
         val totalTimeMinutes = ((System.currentTimeMillis() - startTimeMillis) / 60000).toInt()
-        _workoutState.value = WorkoutState.Finished(totalTimeMinutes, sessionVolume, getDominantDifficulty())
+        val workoutTitle = workoutHolder.workout?.title ?: "CUSTOM"
+        _workoutState.value = WorkoutState.Finished(totalTimeMinutes, sessionVolume, getDominantDifficulty(), workoutTitle)
+        
         viewModelScope.launch {
-            val workoutTitle = workoutHolder.workout?.title ?: "CUSTOM"
             val summary = WorkoutSummary(workoutTitle, totalTimeMinutes, 0, System.currentTimeMillis())
             
             // Save to DataStore
@@ -382,7 +338,7 @@ class WorkoutPlayerViewModel @Inject constructor(
                 )
             )
             
-            // PROGRAM EKRANINDAKİ TİK İÇİN: Tam antrenman ismini ActivityRecord olarak da kaydet
+            // Tam antrenman ismini ActivityRecord olarak da kaydet
             pushupRepo.insertRecord(
                 ActivityRecord(
                     type = workoutTitle, // Örn: MACHINE_WEIGHT_PUSH
@@ -408,12 +364,21 @@ class WorkoutPlayerViewModel @Inject constructor(
         timerJob?.cancel(); exerciseTimerJob?.cancel()
         audioCoach.announceExercise("Dinlen, $duration saniye. Sıradaki: ${nextExercise.name}, $nextSet. set.")
 
-        startService("Dinlenme Başladı", "$duration saniye kaldı")
+        // Bildirim başlığına (X/Y) ve set bilgisini ekle
+        val workout = workoutHolder.workout
+        val total = workout?.exercises?.size ?: 0
+        val currentIdx = workoutHolder.currentExerciseIndex + 1
+        val title = "($currentIdx/$total) Dinlenme: $duration sn"
+        val content = "Sıradaki: ${nextExercise.name} ($nextSet. Set)"
+        
+        updateNotification(title, content)
+        
         timerJob = viewModelScope.launch {
             var remainingTime = duration
             while (remainingTime > 0) {
                 _workoutState.value = WorkoutState.Resting(nextExercise, nextSet, remainingTime, duration)
-                updateNotification("Dinlenme: $remainingTime sn", "Sıradaki: ${nextExercise.name}")
+                val liveTitle = "($currentIdx/$total) Dinlenme: $remainingTime sn"
+                updateNotification(liveTitle, content)
                 if (remainingTime == 3) { launch { audioCoach.playCountdown() } }
                 delay(1000); remainingTime--
             }
@@ -489,24 +454,35 @@ class WorkoutPlayerViewModel @Inject constructor(
 
         val initialTime = parseExerciseTime(exercise.reps)
 
-        _workoutState.value = WorkoutState.InProgress(exercise, category, setIndex, workoutHolder.workout!!.exercises.size, workoutHolder.currentExerciseIndex + 1, hint, coachSuggestion, initialTime, false, initialTime != null)
+        _workoutState.value = WorkoutState.InProgress(exercise, category, setIndex, workoutHolder.workout!!.exercises.size, workoutHolder.currentExerciseIndex + 1,
+            coachSuggestion, initialTime, false
+        )
 
+        val workoutTotal = workoutHolder.workout?.exercises?.size ?: 0
+        val currentExIdx = workoutHolder.currentExerciseIndex + 1
+        
         if (initialTime != null) {
-            updateNotification("Hareket: ${exercise.name}", "Hazırlanılıyor...")
-            stateUpdateJob = viewModelScope.launch { delay(2500); val cur = _workoutState.value; if (cur is WorkoutState.InProgress) { _workoutState.value = cur.copy(isPreparing = false); startExerciseTimer(initialTime) } }
-        } else updateNotification("Hareket: ${exercise.name}", "$setIndex. Set yapılıyor")
+            updateNotification("($currentExIdx/$workoutTotal) ${exercise.name}", "Hazırlanılıyor...")
+            stateUpdateJob = viewModelScope.launch { delay(2500); val cur = _workoutState.value; if (cur is WorkoutState.InProgress) { _workoutState.value = cur.copy(); startExerciseTimer(initialTime) } }
+        } else {
+            updateNotification("($currentExIdx/$workoutTotal) ${exercise.name}", "$setIndex. Set yapılıyor")
+        }
     }
 
     private fun startExerciseTimer(seconds: Int) {
         exerciseTimerJob?.cancel()
         exerciseTimerJob = viewModelScope.launch {
             var time = seconds
+            val total = workoutHolder.workout?.exercises?.size ?: 0
+            val currentIdx = workoutHolder.currentExerciseIndex + 1
+            val exName = _workoutState.value.let { if (it is WorkoutState.InProgress) it.exercise.name else "Antrenman" }
+            
             while (time > 0) {
                 val cur = _workoutState.value
                 if (cur is WorkoutState.InProgress) {
                     if (cur.isTimerPaused) break
                     _workoutState.value = cur.copy(remainingExerciseTime = time)
-                    updateNotification("Hareket: ${cur.exercise.name}", "$time sn kaldı")
+                    updateNotification("($currentIdx/$total) $exName", "$time sn kaldı")
                     if (time == 3) { launch { audioCoach.playCountdown() } }
                 }
                 delay(1000); time--
@@ -515,7 +491,7 @@ class WorkoutPlayerViewModel @Inject constructor(
         }
     }
 
-    private fun updateNotification(title: String, content: String, isRunning: Boolean = true) {
+    private fun updateNotification(title: String, content: String) {
         val intent = Intent(getApplication(), WorkoutService::class.java).apply {
             putExtra("title", title)
             putExtra("content", content)
@@ -533,9 +509,8 @@ class WorkoutPlayerViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
-        voiceCommandManager.stopListening()
-        stopService()
-        audioCoach.shutdown()
+        // ViewModel silindiğinde servisi DURDURMA. Antrenman arka planda devam etmeli.
+        // stopService() ve audioCoach.shutdown() kaldırıldı.
         timerJob?.cancel()
         exerciseTimerJob?.cancel()
         stateUpdateJob?.cancel()

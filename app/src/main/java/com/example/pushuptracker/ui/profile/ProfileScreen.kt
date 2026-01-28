@@ -13,20 +13,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -75,7 +71,6 @@ fun ProfileScreen(viewModel: ProfileViewModel = hiltViewModel()) {
     var showResetDialog by remember { mutableStateOf(false) }
     var showCheckAnimation by remember { mutableStateOf(false) }
     var showWaterReminderDialog by remember { mutableStateOf(false) }
-    var showVoiceCommandsDialog by remember { mutableStateOf(false) }
 
     if (showResetDialog) {
         AlertDialog(
@@ -110,10 +105,6 @@ fun ProfileScreen(viewModel: ProfileViewModel = hiltViewModel()) {
                 showWaterReminderDialog = false
             }
         )
-    }
-
-    if (showVoiceCommandsDialog) {
-        VoiceCommandsInfoDialog(onDismiss = { showVoiceCommandsDialog = false })
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -155,24 +146,6 @@ fun ProfileScreen(viewModel: ProfileViewModel = hiltViewModel()) {
                     )
                 }
 
-                // --- Hands-free / Voice Section ---
-                item {
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
-                    SectionTitle(title = "Antrenman Yardımı")
-                    Spacer(modifier = Modifier.height(16.dp))
-                    
-                    Button(
-                        onClick = { showVoiceCommandsDialog = true },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondaryContainer, contentColor = MaterialTheme.colorScheme.onSecondaryContainer),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Icon(Icons.Default.Mic, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Sesli Komutları Görüntüle", fontWeight = FontWeight.Bold)
-                    }
-                }
-
                 // --- Reset Section ---
                 item {
                     HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
@@ -211,68 +184,6 @@ fun ProfileScreen(viewModel: ProfileViewModel = hiltViewModel()) {
                 showCheckAnimation = false
             }
         }
-    }
-}
-
-@Composable
-fun VoiceCommandsInfoDialog(onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { 
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Mic, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.width(8.dp))
-                Text("Sesli Komut Rehberi")
-            }
-        },
-        text = {
-            Column(
-                modifier = Modifier.height(400.dp).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text("Antrenman sırasında elini kullanmadan şu komutları söyleyebilirsin:", style = MaterialTheme.typography.bodyMedium)
-                
-                Text("Antrenman Kontrol", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
-                CommandItem("Kolay Zorluk", "Seti kolay olarak bitirir.")
-                CommandItem("Orta Zorluk", "Seti orta olarak bitirir.")
-                CommandItem("Zor Zorluk", "Seti zor olarak bitirir.")
-                CommandItem("Dinlenmeyi Atla", "Dinlenme süresini atlar.")
-                CommandItem("Seti Bitir", "Mevcut çalışmayı sonlandırır.")
-                CommandItem("Antrenmanı Bitir", "Antrenmanı sonlandırır.")
-
-                HorizontalDivider()
-
-                Text("Medya Kontrol", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
-                CommandItem("Medyayı Durdur", "Müziği duraklatır.")
-                CommandItem("Medyayı Başlat", "Müziği oynatır.")
-                CommandItem("Bir Sonraki Medya", "Şarkıyı geçer.")
-                CommandItem("Bir Önceki Medya", "Önceki şarkıya döner.")
-
-                HorizontalDivider()
-
-                Text("İleri / Geri Sarma", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
-                CommandItem("Medyayı [X] Dakika İleri Sar", "Belirtilen süre kadar ileri alır.")
-                CommandItem("Medyayı [X] Dakika Geri Sar", "Belirtilen süre kadar geri alır.")
-                
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    "İpucu: Komutları net söylemek performansı artırır. Mikrofon antrenman boyunca sessizce seni dinler.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                )
-            }
-        },
-        confirmButton = {
-            Button(onClick = onDismiss) { Text("Anladım") }
-        }
-    )
-}
-
-@Composable
-fun CommandItem(command: String, description: String) {
-    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-        Text(text = "\"$command\"", fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.primary, fontSize = 14.sp)
-        Text(text = description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -350,7 +261,7 @@ fun WaterReminderDialog(
         title = { Text("Su Hatırlatıcısı Ayarla") },
         text = {
             OutlinedTextField(
-                frequencyInput,
+                value = frequencyInput,
                 onValueChange = { frequencyInput = it },
                 label = { Text("Sıklık (dakika)") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),

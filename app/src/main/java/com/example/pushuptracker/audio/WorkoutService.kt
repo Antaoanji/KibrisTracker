@@ -324,7 +324,8 @@ class WorkoutService : Service() {
     }
 
     private fun updateNotification(title: String, content: String, isRunning: Boolean) {
-        val notification = createNotificationBuilder(title, content, isRunning).build()
+        val isResting = title.contains("Dinlenme", ignoreCase = true)
+        val notification = createNotificationBuilder(title, content, isRunning, isResting).build()
         val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         nm.notify(notificationId, notification)
         
@@ -337,7 +338,7 @@ class WorkoutService : Service() {
         }
     }
 
-    private fun createNotificationBuilder(title: String, content: String, isRunning: Boolean): NotificationCompat.Builder {
+    private fun createNotificationBuilder(title: String, content: String, isRunning: Boolean, isResting: Boolean): NotificationCompat.Builder {
         val intent = Intent(this, MainActivity::class.java).apply { flags = Intent.FLAG_ACTIVITY_SINGLE_TOP }
         val pendingIntent = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
 
@@ -346,8 +347,11 @@ class WorkoutService : Service() {
 
         val priority = if (isRunning && isAppInForeground()) NotificationCompat.PRIORITY_LOW else NotificationCompat.PRIORITY_MAX
 
+        // İkon seçimi: Dinlenmede 'hourglass_empty', antrenmanda 'fitness_center'
+        val iconRes = if (isResting) android.R.drawable.ic_menu_recent_history else android.R.drawable.ic_dialog_info
+
         return NotificationCompat.Builder(this, channelId)
-            .setSmallIcon(R.drawable.logo)
+            .setSmallIcon(iconRes)
             .setContentTitle(title)
             .setContentText(content)
             .setOngoing(isRunning)

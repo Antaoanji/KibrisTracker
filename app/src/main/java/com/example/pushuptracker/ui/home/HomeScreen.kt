@@ -4,7 +4,6 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
-import android.net.Uri
 import android.os.IBinder
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
@@ -37,6 +36,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.net.toUri
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.airbnb.lottie.compose.*
@@ -280,7 +280,7 @@ fun LymphaticActiveMenu(
                 // Info butonu artık her zaman orada
                 IconButton(onClick = {
                     if (state != null && !state.isPaused) onPause()
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(videoUrl))
+                    val intent = Intent(Intent.ACTION_VIEW, videoUrl.toUri())
                     context.startActivity(intent)
                 }) {
                     Icon(

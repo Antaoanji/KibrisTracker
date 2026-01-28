@@ -13,10 +13,8 @@ room = "2.6.1"
 work = "2.10.0"
 composeBom = "2024.11.00" # 2026 hatalıydı, güncel kararlı sürüm bu.
 composeUi = "1.7.5"
-paging = "3.3.4"
 datastore = "1.1.1"
 lottie = "6.6.0"
-protobuf = "3.25.5"
 
 # Health Connect (SDK 35 İçin Uyumlu Sürüm)
 healthConnect = "1.1.0-alpha11"
@@ -31,7 +29,6 @@ androidxHilt = "1.2.0"
 # Networking & Serialization
 retrofit = "2.11.0"
 okhttp = "4.12.0" # 5.x alpha'dır, 4.12 stable'dır.
-moshi = "1.15.1"
 kotlinxSerialization = "1.7.3"
 kotlinxCoroutines = "1.9.0"
 kotlinxDatetime = "0.6.1"
@@ -43,8 +40,6 @@ coilCompose = "2.7.0"
 mpandroidchart = "v3.1.0"
 
 # Testing
-mockito = "5.12.0"
-mockwebserver = "4.12.0"
 junit = "4.13.2"
 androidxTestExtJunit = "1.2.1"
 espressoCore = "3.6.1"
@@ -83,11 +78,6 @@ hilt-android = { group = "com.google.dagger", name = "hilt-android", version.ref
 hilt-compiler = { group = "com.google.dagger", name = "hilt-android-compiler", version.ref = "hilt" }
 hilt-android-testing = { group = "com.google.dagger", name = "hilt-android-testing", version.ref = "hilt" }
 androidx-hilt-navigation-compose = { group = "androidx.hilt", name = "hilt-navigation-compose", version.ref = "androidxHilt" }
-
-# Firebase
-firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
-firebase-auth = { group = "com.google.firebase", name = "firebase-auth" }
-firebase-firestore = { group = "com.google.firebase", name = "firebase-firestore" }
 
 # Networking
 retrofit = { group = "com.squareup.retrofit2", name = "retrofit", version.ref = "retrofit" }

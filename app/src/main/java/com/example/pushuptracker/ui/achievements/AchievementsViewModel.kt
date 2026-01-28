@@ -12,7 +12,6 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.ZoneId
-import java.util.Calendar
 import javax.inject.Inject
 
 data class AchievementsUiState(
@@ -96,7 +95,6 @@ class AchievementsViewModel @Inject constructor(
                     squats = totalSquats,
                     plankMin = totalPlankSec / 60.0,
                     maxPushDay = maxPushupsPerDay,
-                    unlockedCount = unlockedBadges.size,
                     allRecords = allRecords
                 )
             }
@@ -110,7 +108,8 @@ class AchievementsViewModel @Inject constructor(
         id: String, streak: Int, pushups: Double, maxPushup: Double, walkMin: Double, walkSessions: Int,
         waterDays: Int, workouts: Int, tonage: Double, maxWorkoutTonage: Double, calories: Double,
         uniqueExercises: Int, muscles: Int, dips: Double, pullups: Double, squats: Double,
-        plankMin: Double, maxPushDay: Double, unlockedCount: Int, allRecords: List<ActivityRecord>
+        plankMin: Double, maxPushDay: Double,
+        allRecords: List<ActivityRecord>
     ): Float {
         return when (id) {
             "streak_3" -> streak / 3f; "streak_7" -> streak / 7f; "streak_14" -> streak / 14f; "streak_30" -> streak / 30f

@@ -16,6 +16,7 @@ import com.example.pushuptracker.model.Streak
 import com.example.pushuptracker.model.WorkoutSummary
 import com.example.pushuptracker.sensor.PushupSensorManager
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.time.DayOfWeek
@@ -118,6 +119,7 @@ class HomeViewModel @Inject constructor(
         val (todayWalking, allWalking) = bundle.walking
         val (todayLymphatic, allLymphatic) = bundle.lymphatic
 
+        // Ağır filtreleme ve hesaplama işlemlerini yapıyoruz
         val achievedPushupDates = allPushups.filter { it.value >= dailyPushupGoal }.map { it.date }.toSet()
         val achievedWaterDates = allWater.filter { it.value >= dailyWaterGoal }.map { it.date }.toSet()
         val achievedWalkingDates = allWalking.filter { it.value >= 33.0 }.map { it.date }.toSet()
@@ -166,7 +168,9 @@ class HomeViewModel @Inject constructor(
             streaks = listOf(pushupStreakData, waterStreakData, walkingStreakData, lymphaticStreakData, workoutStreakData)
         )
 
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), HomeScreenState())
+    }
+    .flowOn(Dispatchers.Default) // DÜZELTME: Hesaplamaları Main Thread dışına (Arka plana) taşıdık.
+    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), HomeScreenState())
 
     fun startWalkingWorkout() {
         val intent = Intent(getApplication(), WorkoutService::class.java).apply {
@@ -317,10 +321,13 @@ class HomeViewModel @Inject constructor(
     }
 
     private fun isRestDay(date: LocalDate): Boolean {
-        val day = date.dayOfWeek
+        val day = date.ofDayOfWeek ?: date.dayOfWeek // Güvenli erişim
         return day == DayOfWeek.THURSDAY || day == DayOfWeek.SUNDAY
     }
 }
+
+// Extension property to fix potentially missing dayOfWeek access if needed
+val LocalDate.ofDayOfWeek: DayOfWeek? get() = this.dayOfWeek
 
 data class HomeScreenState(
     val streaks: List<Streak> = emptyList()

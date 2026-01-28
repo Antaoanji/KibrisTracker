@@ -1,7 +1,6 @@
 package com.example.pushuptracker.ui.programs
 
 import android.content.Intent
-import android.net.Uri
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -36,6 +35,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.net.toUri
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
@@ -87,10 +87,9 @@ fun ProgramsScreen(
 
     if (showResetMenu) {
         ResetProgramsDialog(
-            onDismiss = { showResetMenu = false },
+            onDismiss = { },
             onConfirm = { selectedTypes ->
                 viewModel.resetPrograms(selectedTypes)
-                showResetMenu = false
             }
         )
     }
@@ -142,8 +141,7 @@ fun ProgramsScreen(
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                    verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = "Haftalık Akış",
                         style = MaterialTheme.typography.headlineSmall,
@@ -151,7 +149,7 @@ fun ProgramsScreen(
                         color = MaterialTheme.colorScheme.primary
                     )
                     
-                    IconButton(onClick = { showResetMenu = true }) {
+                    IconButton(onClick = { }) {
                         Icon(
                             Icons.Default.SettingsBackupRestore, 
                             contentDescription = "Sıfırla",
@@ -185,7 +183,7 @@ fun ProgramsScreen(
 
         if (showInfoSheet && workoutDetails != null) {
             ModalBottomSheet(
-                onDismissRequest = { showInfoSheet = false },
+                onDismissRequest = { },
                 sheetState = sheetState,
                 containerColor = MaterialTheme.colorScheme.surface,
                 dragHandle = { BottomSheetDefaults.DragHandle() }
@@ -196,7 +194,7 @@ fun ProgramsScreen(
                     navController = navController,
                     viewModel = viewModel,
                     dayIndex = selectedDayIndex,
-                    onCloseSheet = { showInfoSheet = false }
+                    onCloseSheet = { }
                 )
             }
         }
@@ -431,7 +429,7 @@ fun WorkoutInfoContent(
                         .clickable {
                             if (exercise.videoUrl.isNotEmpty()) {
                                 try {
-                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(exercise.videoUrl))
+                                    val intent = Intent(Intent.ACTION_VIEW, exercise.videoUrl.toUri())
                                     context.startActivity(intent)
                                 } catch (e: Exception) { }
                             }

@@ -10,6 +10,7 @@ import com.example.pushuptracker.data.repo.PushupRepo
 import com.example.pushuptracker.model.ActivityRecord
 import com.example.pushuptracker.model.WorkoutRecord
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -75,7 +76,7 @@ class StatsViewModel @Inject constructor(
     val exerciseList = pushupRepo.getDistinctExerciseTypes()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), listOf("pushup"))
 
-    // Heatmap verisi - Kesin ve Anlık
+    // Heatmap verisi - Arka planda işleniyor (Performans Düzeltmesi)
     val heatmapData: StateFlow<Map<String, String>> = combine(
         workoutRecordDao.getAllRecords(),
         pushupRepo.getAllRecords()
@@ -87,7 +88,7 @@ class StatsViewModel @Inject constructor(
             val type = record.type.uppercase()
             if (type.contains("PUSH") || type.contains("PULL") || type.contains("LEGS") ||
                 type.contains("UPPER") || type.contains("LOWER") || type == "WORKOUT_COMPLETED") {
-                dataMap[record.date] = record.type // Eğer başlık PUSH içeriyorsa onu al
+                dataMap[record.date] = record.type 
             }
         }
 
@@ -96,9 +97,10 @@ class StatsViewModel @Inject constructor(
             dataMap[record.date] = record.title
         }
 
-        Log.d("HeatmapData", "Syncing Heatmap: ${dataMap.keys.joinToString(", ")}")
         dataMap
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+    }
+    .flowOn(Dispatchers.Default)
+    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
     init {
         checkHealthPermissions()
@@ -196,7 +198,9 @@ class StatsViewModel @Inject constructor(
             totalLymphaticCount = totalLymphaticCount,
             currentStreak = currentStreak
         )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), OverallStats())
+    }
+    .flowOn(Dispatchers.Default)
+    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), OverallStats())
 
     private fun calculateWorkoutStreak(dates: List<LocalDate>): Int {
         if (dates.isEmpty()) return 0
@@ -257,7 +261,9 @@ class StatsViewModel @Inject constructor(
         }.size
 
         ChangeStats(previous = lastWeekCount, current = thisWeekCount)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ChangeStats())
+    }
+    .flowOn(Dispatchers.Default)
+    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ChangeStats())
 
     val monthlyChange = workoutRecordDao.getAllRecords().map { records ->
         val today = LocalDate.now()
@@ -275,7 +281,9 @@ class StatsViewModel @Inject constructor(
         }.size
 
         ChangeStats(previous = lastMonthCount, current = thisMonthCount)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ChangeStats())
+    }
+    .flowOn(Dispatchers.Default)
+    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ChangeStats())
 
 
     fun onExerciseSelected(exercise: String) {

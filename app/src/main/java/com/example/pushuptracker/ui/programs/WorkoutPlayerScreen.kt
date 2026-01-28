@@ -1,11 +1,14 @@
 package com.example.pushuptracker.ui.programs
 
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.view.View
 import androidx.compose.animation.*
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Canvas as ComposeCanvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -35,11 +38,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -48,14 +51,19 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.core.graphics.createBitmap
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.example.pushuptracker.R
 import com.example.pushuptracker.model.Badge
 import com.example.pushuptracker.model.Exercise
 import com.example.pushuptracker.navigation.Screen
+import com.example.pushuptracker.util.ShareUtils
 import com.example.pushuptracker.util.YoutubeUtils
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -77,16 +85,6 @@ fun WorkoutPlayerScreen(
     val scope = rememberCoroutineScope()
     var showBottomSheet by remember { mutableStateOf(false) }
     var selectedExerciseForInfo by remember { mutableStateOf<Exercise?>(null) }
-
-    var activeBadge by remember { mutableStateOf<Badge?>(null) }
-
-    LaunchedEffect(Unit) {
-        viewModel.newBadgeUnlocked.collect { badge ->
-            activeBadge = badge
-            delay(5000)
-            activeBadge = null
-        }
-    }
 
     val currentView = LocalView.current
     DisposableEffect(Unit) {
@@ -148,7 +146,6 @@ fun WorkoutPlayerScreen(
                         exercise = currentState.exercise,
                         category = currentState.category,
                         set = currentState.currentSet,
-                        historyHint = currentState.historyHint,
                         coachSuggestion = currentState.coachSuggestion,
                         remainingTime = currentState.remainingExerciseTime,
                         isTimerPaused = currentState.isTimerPaused,
@@ -175,13 +172,33 @@ fun WorkoutPlayerScreen(
                         onSkip = { viewModel.skipRest() },
                         onAddTime = { viewModel.addRestTime() }
                     )
-                    is WorkoutState.Finished -> FinishedScreen(
-                        totalTimeMinutes = currentState.totalTimeMinutes,
-                        totalVolume = currentState.totalVolume,
-                        dominantDifficulty = currentState.dominantDifficulty,
-                        onNavigateToPrograms = { navController.navigate(Screen.Programs.route) { popUpTo(Screen.Programs.route) { inclusive = true } } },
-                        onNavigateToHome = { navController.navigate(Screen.Home.route) { popUpTo(Screen.Home.route) { inclusive = true } } }
-                    )
+                    is WorkoutState.Finished -> {
+                        val context = LocalContext.current
+                        var showShareCard by remember { mutableStateOf(false) }
+                        
+                        FinishedScreen(
+                            totalTimeMinutes = currentState.totalTimeMinutes,
+                            totalVolume = currentState.totalVolume,
+                            dominantDifficulty = currentState.dominantDifficulty,
+                            workoutTitle = currentState.workoutTitle,
+                            onNavigateToPrograms = { navController.navigate(Screen.Programs.route) { popUpTo(Screen.Programs.route) { inclusive = true } } },
+                            onNavigateToHome = { navController.navigate(Screen.Home.route) { popUpTo(Screen.Home.route) { inclusive = true } } },
+                            onShare = { showShareCard = true }
+                        )
+
+                        if (showShareCard) {
+                            ShareCardDialog(
+                                workoutTitle = currentState.workoutTitle,
+                                totalTimeMinutes = currentState.totalTimeMinutes,
+                                totalVolume = currentState.totalVolume,
+                                onDismiss = { showShareCard = false },
+                                onCapture = { bitmap ->
+                                    ShareUtils.shareBitmap(context, bitmap, "Antrenman Başarı Kartım")
+                                    showShareCard = false
+                                }
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -206,11 +223,113 @@ fun WorkoutPlayerScreen(
 }
 
 @Composable
+fun ShareCardDialog(
+    workoutTitle: String,
+    totalTimeMinutes: Int,
+    totalVolume: Double,
+    onDismiss: () -> Unit,
+    onCapture: (Bitmap) -> Unit
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.9f)
+                .wrapContentHeight()
+                .clip(RoundedCornerShape(24.dp))
+                .background(Color(0xFF121212))
+                .padding(2.dp)
+                .border(1.dp, Color(0xFF00F5D4).copy(alpha = 0.3f), RoundedCornerShape(24.dp))
+        ) {
+            val view = LocalView.current
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        brush = Brush.verticalGradient(
+                            colors = listOf(Color(0xFF1E1E1E), Color(0xFF0A0A0A))
+                        )
+                    )
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Icon(
+                    imageVector = Icons.Default.EmojiEvents,
+                    contentDescription = null,
+                    tint = Color(0xFF00F5D4),
+                    modifier = Modifier.size(48.dp)
+                )
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    text = "ANTRENMAN TAMAMLANDI",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = Color(0xFF00F5D4),
+                    letterSpacing = 2.sp
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = formatWorkoutTitle(workoutTitle),
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = Color.White,
+                    fontWeight = FontWeight.ExtraBold,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(Modifier.height(24.dp))
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("SÜRE", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                        Text("$totalTimeMinutes dk", style = MaterialTheme.typography.titleLarge, color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("TOPLAM YÜK", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                        val volumeText = if (totalVolume > 1000) "${(totalVolume / 1000).toInt()} Ton" else "${totalVolume.toInt()} kg"
+                        Text(volumeText, style = MaterialTheme.typography.titleLarge, color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                }
+                
+                Spacer(Modifier.height(32.dp))
+                Text(
+                    text = "KIBRIS WORKOUT",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Color.Gray.copy(alpha = 0.5f),
+                    fontWeight = FontWeight.Light
+                )
+                
+                Spacer(Modifier.height(24.dp))
+                Button(
+                    onClick = {
+                        val bitmap = createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+                        val canvas = Canvas(bitmap)
+                        view.draw(canvas)
+                        onCapture(bitmap)
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00F5D4), contentColor = Color.Black)
+                ) {
+                    Text("GÖRSELİ PAYLAŞ")
+                }
+            }
+        }
+    }
+}
+
+fun formatWorkoutTitle(title: String): String {
+    return title.replace("MACHINE_WEIGHT_", "Makine + ")
+        .replace("CALISTHENICS_WEIGHT_", "Cali + ")
+        .replace("_", " ")
+}
+
+@Composable
 fun ExerciseScreen(
     exercise: Exercise,
     category: ExerciseCategory,
     set: Int,
-    historyHint: String?,
     coachSuggestion: String?,
     remainingTime: Int?,
     isTimerPaused: Boolean,
@@ -256,7 +375,7 @@ fun ExerciseScreen(
 
             // --- SAYAÇ / SET BİLGİSİ ---
             Box(contentAlignment = Alignment.Center, modifier = Modifier.size(170.dp)) {
-                Canvas(modifier = Modifier.fillMaxSize()) {
+                ComposeCanvas(modifier = Modifier.fillMaxSize()) {
                     drawArc(color = Color.White.copy(alpha = 0.15f), startAngle = -90f, sweepAngle = 360f, useCenter = false, style = Stroke(width = 8.dp.toPx()))
                     drawArc(color = Color(0xFF00F5D4), startAngle = -90f, sweepAngle = animatedProgress * 360f, useCenter = false, style = Stroke(width = 8.dp.toPx(), cap = StrokeCap.Round))
                 }
@@ -274,12 +393,20 @@ fun ExerciseScreen(
                 }
             }
 
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(8.dp)) // Azaltılmış Boşluk (Eskisi 12.dp)
 
-            if (historyHint != null) Text(text = historyHint, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.6f))
-            if (coachSuggestion != null) Text(text = "💡 $coachSuggestion", style = MaterialTheme.typography.bodySmall, color = Color(0xFF00F5D4), textAlign = TextAlign.Center)
+            if (coachSuggestion != null) {
+                // Seçilen zorluğa göre renk belirleme
+                val suggestionColor = when {
+                    coachSuggestion.contains("kolay", true) -> Color(0xFF4CAF50)
+                    coachSuggestion.contains("formun iyiydi", true) -> Color(0xFFFFC107)
+                    coachSuggestion.contains("zorlandın", true) -> Color(0xFFF44336)
+                    else -> Color(0xFF00F5D4)
+                }
+                Text(text = "💡 $coachSuggestion", style = MaterialTheme.typography.bodySmall, color = suggestionColor, textAlign = TextAlign.Center)
+            }
 
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(12.dp)) // Azaltılmış Boşluk (Eskisi 24.dp)
 
             // --- AKILLI EKİPMAN UI ---
             Column(modifier = Modifier.fillMaxWidth().background(Color.Black.copy(alpha = 0.4f), RoundedCornerShape(16.dp)).padding(12.dp)) {
@@ -437,23 +564,54 @@ fun RestScreen(restTime: Int, initialDuration: Int, nextExerciseName: String, on
 }
 
 @Composable
-fun FinishedScreen(totalTimeMinutes: Int, totalVolume: Double, dominantDifficulty: String, onNavigateToPrograms: () -> Unit, onNavigateToHome: () -> Unit) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center, modifier = Modifier.fillMaxWidth().padding(16.dp)) {
-        Text("Tebrikler!", style = MaterialTheme.typography.displayMedium.copy(color = Color.White, shadow = Shadow(Color.Black, blurRadius = 8f)))
-        Text("Antrenman Karnen", style = MaterialTheme.typography.titleLarge.copy(color = Color.White.copy(alpha = 0.8f)))
-        Spacer(Modifier.height(32.dp))
+fun FinishedScreen(totalTimeMinutes: Int, totalVolume: Double, dominantDifficulty: String, workoutTitle: String, onNavigateToPrograms: () -> Unit, onNavigateToHome: () -> Unit, onShare: () -> Unit) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally, 
+        verticalArrangement = Arrangement.Top, 
+        modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp)
+    ) {
+        Spacer(Modifier.height(12.dp))
+        Icon(
+            imageVector = Icons.Default.EmojiEvents,
+            contentDescription = null,
+            tint = Color(0xFF00F5D4),
+            modifier = Modifier.size(52.dp)
+        )
+        
+        Spacer(Modifier.height(8.dp))
+        Text("Tebrikler!", style = MaterialTheme.typography.headlineMedium.copy(color = Color.White, shadow = Shadow(Color.Black, blurRadius = 8f)))
+        
+        Spacer(Modifier.height(4.dp))
+        Text(text = formatWorkoutTitle(workoutTitle), style = MaterialTheme.typography.titleMedium, color = Color(0xFF00F5D4), fontWeight = FontWeight.Bold)
+
+        Spacer(Modifier.height(20.dp))
         Row(modifier = Modifier.fillMaxWidth()) {
             InfoCard(title = "Süre", value = "$totalTimeMinutes dk", modifier = Modifier.weight(1f))
-            Spacer(modifier = Modifier.padding(8.dp))
             val volumeText = if (totalVolume > 1000) "${(totalVolume / 1000).toInt()} Ton" else "${totalVolume.toInt()} kg"
             InfoCard(title = "Toplam Yük", value = volumeText, modifier = Modifier.weight(1f))
         }
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(12.dp))
         InfoCard(title = "Hissiyat", value = dominantDifficulty, modifier = Modifier.fillMaxWidth())
-        Spacer(Modifier.height(48.dp))
-        Button(onClick = onNavigateToPrograms, modifier = Modifier.fillMaxWidth().height(52.dp)) { Text("Programa Dön", style = MaterialTheme.typography.titleLarge) }
-        Spacer(Modifier.height(16.dp))
-        OutlinedButton(onClick = onNavigateToHome, modifier = Modifier.fillMaxWidth().height(52.dp)) { Text("Ana Sayfa", style = MaterialTheme.typography.titleLarge, color = Color.White) }
+        
+        Spacer(Modifier.weight(1f)) 
+        
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = onShare, modifier = Modifier.fillMaxWidth().height(48.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00F5D4), contentColor = Color.Black)) {
+                Icon(Icons.Default.Share, null, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Başarı Kartını Paylaş", fontWeight = FontWeight.Bold)
+            }
+            
+            Button(onClick = onNavigateToPrograms, modifier = Modifier.fillMaxWidth().height(48.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00F5D4), contentColor = Color.Black)) {
+                Text("Programa Dön", style = MaterialTheme.typography.titleMedium)
+            }
+            
+            OutlinedButton(onClick = onNavigateToHome, modifier = Modifier.fillMaxWidth().height(48.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Color.Gray)) {
+                Text("Ana Sayfa", style = MaterialTheme.typography.titleMedium, color = Color.White)
+            }
+        }
+        
+        Spacer(Modifier.height(8.dp))
     }
 }
 
@@ -464,8 +622,8 @@ fun InfoCard(title: String, value: String, modifier: Modifier = Modifier) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Text(text = title, style = MaterialTheme.typography.titleMedium.copy(color = Color.White.copy(alpha = 0.8f)))
-        Text(text = value, style = MaterialTheme.typography.displaySmall.copy(color = Color.White, fontWeight = FontWeight.Bold))
+        Text(text = title, style = MaterialTheme.typography.labelLarge.copy(color = Color.White.copy(alpha = 0.6f)))
+        Text(text = value, style = MaterialTheme.typography.headlineMedium.copy(color = Color.White, fontWeight = FontWeight.Bold))
     }
 }
 

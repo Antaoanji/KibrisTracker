@@ -75,7 +75,11 @@ class ProgramsViewModel @Inject constructor(
         flow {
             if (healthConnectManager.hasAllPermissions()) {
                 val endTime = Instant.ofEpochMilli(summary.timestamp)
-                val startTime = endTime.minusSeconds(summary.totalTimeMinutes.toLong() * 60)
+                // DÜZELTME: startTime ve endTime eşit olursa Health Connect hata verir. 
+                // Süre 0 olsa bile en az 1 dakika (60 sn) öncesinden başlatıyoruz.
+                val durationSeconds = maxOf(60L, summary.totalTimeMinutes.toLong() * 60)
+                val startTime = endTime.minusSeconds(durationSeconds)
+
                 val calories = healthConnectManager.readTotalCalories(startTime, endTime)
                 emit(calories.toInt())
             } else {

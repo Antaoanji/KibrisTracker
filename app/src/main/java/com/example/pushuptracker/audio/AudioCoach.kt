@@ -57,10 +57,11 @@ class AudioCoach @Inject constructor(
     }
 
     /**
-     * Ses odağını talep eder. Diğer medya seslerini (müzik vb.) kısar veya durdurur.
+     * Ses odağını talep eder. Diğer medya seslerini (müzik vb.) %50 seviyesine kısar.
      */
     private fun requestFocus(): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            // GAIN_TRANSIENT_MAY_DUCK: Mevcut medyayı durdurmaz, sesini kısar.
             audioFocusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
                 .setAudioAttributes(audioAttributes)
                 .setAcceptsDelayedFocusGain(true)
@@ -89,7 +90,6 @@ class AudioCoach @Inject constructor(
     fun announceExercise(text: String) {
         if (isInitialized) {
             requestFocus()
-            // Konuşma sonunda odağı bırakma işlemini TTS motoru kuyruğuna güvenerek yapıyoruz
             tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "announcement")
         }
     }
