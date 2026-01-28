@@ -5,23 +5,27 @@ import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -29,15 +33,18 @@ import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.pushuptracker.model.WorkoutRecord
 import com.github.mikephil.charting.charts.BarChart
 import com.github.mikephil.charting.charts.LineChart
 import com.github.mikephil.charting.components.XAxis
 import com.github.mikephil.charting.data.*
 import com.github.mikephil.charting.formatter.ValueFormatter
+import java.time.DayOfWeek
 import java.time.Duration
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.time.temporal.TemporalAdjusters
 
 @Composable
 fun StatsScreen(viewModel: StatsViewModel = hiltViewModel()) {
@@ -51,6 +58,7 @@ fun StatsScreen(viewModel: StatsViewModel = hiltViewModel()) {
     val healthSessions by viewModel.healthSessions.collectAsStateWithLifecycle()
     val hasHealthPermissions by viewModel.hasHealthPermissions.collectAsStateWithLifecycle()
     val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
+    val heatmapData by viewModel.heatmapData.collectAsStateWithLifecycle()
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = PermissionController.createRequestPermissionResultContract()
@@ -76,6 +84,10 @@ fun StatsScreen(viewModel: StatsViewModel = hiltViewModel()) {
                     onRefresh = { viewModel.loadHealthData() }
                 )
             }
+
+            item {
+                WorkoutHeatmapCard(heatmapData = heatmapData)
+            }
             
             item {
                 PushupChartCard(chartUiState = chartUiState, chartTimeSpan = chartTimeSpan, chartType = chartType, viewModel = viewModel)
@@ -98,6 +110,164 @@ fun StatsScreen(viewModel: StatsViewModel = hiltViewModel()) {
                 )
             }
         }
+    }
+}
+
+@Composable
+fun WorkoutHeatmapCard(heatmapData: Map<String, String>) {
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = ComposeColor(0xFF2C2C2E))
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("Antrenman Takvimi", style = MaterialTheme.typography.titleMedium, color = ComposeColor.White, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            WorkoutHeatmap(heatmapData = heatmapData)
+            
+            Spacer(modifier = Modifier.height(24.dp))
+            HeatmapLegend()
+        }
+    }
+}
+
+@Composable
+fun WorkoutHeatmap(heatmapData: Map<String, String>) {
+    val today = LocalDate.now()
+    // 12 hafta öncesinden başla (Pazartesiye sabitle)
+    val startDay = today.minusWeeks(11).with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+    
+    Row(modifier = Modifier.fillMaxWidth()) {
+        BoxWithConstraints(modifier = Modifier.weight(1f)) {
+            val weekCount = 12
+            val spacing = 4.dp
+            val cellSize = (maxWidth - (spacing * (weekCount))) / (weekCount + 1) // Gün etiketleri için +1 alan
+            
+            Row(horizontalArrangement = Arrangement.spacedBy(spacing)) {
+                // Gün etiketleri sütunu
+                Column(verticalArrangement = Arrangement.spacedBy(spacing)) {
+                    val days = listOf("Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz")
+                    days.forEach { day ->
+                        Box(modifier = Modifier.size(cellSize), contentAlignment = Alignment.CenterStart) {
+                            Text(day, color = ComposeColor.Gray, fontSize = 8.sp)
+                        }
+                    }
+                }
+
+                // Hafta sütunları
+                for (week in 0 until weekCount) {
+                    Column(verticalArrangement = Arrangement.spacedBy(spacing)) {
+                        for (day in 0 until 7) {
+                            val currentDate = startDay.plusWeeks(week.toLong()).plusDays(day.toLong())
+                            val dateStr = currentDate.format(DateTimeFormatter.ISO_LOCAL_DATE)
+
+                            // Logcat'teki 2026-01-28 gibi tarihleri yakalamak için doğrudan Map kontrolü
+                            val workoutTitle = heatmapData[dateStr]
+                            
+                            HeatmapCell(
+                                title = workoutTitle,
+                                size = cellSize,
+                                isToday = currentDate == today,
+                                isFuture = currentDate.isAfter(today)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun HeatmapCell(title: String?, size: Dp, isToday: Boolean, isFuture: Boolean) {
+    val color = when {
+        title != null && title.contains("PUSH") -> ComposeColor(0xFFFF5722)
+        title != null && title.contains("PULL") -> ComposeColor(0xFF2196F3)
+        title != null && title.contains("LEGS") -> ComposeColor(0xFF4CAF50)
+        title != null && title.contains("UPPER") -> ComposeColor(0xFF9C27B0)
+        title != null && title.contains("LOWER") -> ComposeColor(0xFFFFC107)
+        title != null -> ComposeColor(0xFF00F5D4) // Legacy veya Genel
+        isFuture -> ComposeColor.Transparent
+        else -> ComposeColor.White.copy(alpha = 0.05f) // Boş gün
+    }
+
+    val icon = when {
+        title == null -> null
+        title.contains("MACHINE") -> Icons.Default.FitnessCenter
+        title.contains("CALISTHENICS") -> Icons.Default.AccessibilityNew
+        else -> null
+    }
+
+    Box(
+        modifier = Modifier
+            .size(size)
+            .clip(RoundedCornerShape(2.dp))
+            .background(color)
+            .then(
+                if (isToday) Modifier.border(1.dp, ComposeColor.White.copy(alpha = 0.8f), RoundedCornerShape(2.dp))
+                else Modifier
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        if (icon != null) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = ComposeColor.White.copy(alpha = 0.9f),
+                modifier = Modifier.size(size * 0.7f)
+            )
+        }
+    }
+}
+
+@Composable
+fun HeatmapLegend() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(ComposeColor.Black.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        // Row 1: Types
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            LegendItem("Push", ComposeColor(0xFFFF5722))
+            LegendItem("Pull", ComposeColor(0xFF2196F3))
+            LegendItem("Legs", ComposeColor(0xFF4CAF50))
+            LegendItem("Upper", ComposeColor(0xFF9C27B0))
+            LegendItem("Lower", ComposeColor(0xFFFFC107))
+        }
+        
+        HorizontalDivider(color = ComposeColor.White.copy(alpha = 0.05f))
+        
+        // Row 2: Modes
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Start,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Default.FitnessCenter, null, tint = ComposeColor.Gray, modifier = Modifier.size(14.dp))
+            Text(" Makine", color = ComposeColor.Gray, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+            
+            Spacer(modifier = Modifier.width(24.dp))
+            
+            Icon(Icons.Default.AccessibilityNew, null, tint = ComposeColor.Gray, modifier = Modifier.size(14.dp))
+            Text(" Cali", color = ComposeColor.Gray, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+            
+            Spacer(modifier = Modifier.weight(1f))
+            
+            Box(modifier = Modifier.size(8.dp).background(ComposeColor(0xFF00F5D4).copy(alpha = 0.5f), RoundedCornerShape(1.dp)))
+            Text(" Geçmiş", color = ComposeColor.Gray, fontSize = 11.sp, modifier = Modifier.padding(start = 4.dp))
+        }
+    }
+}
+
+@Composable
+fun LegendItem(label: String, color: ComposeColor) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(color))
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(label, color = ComposeColor.LightGray, fontSize = 11.sp, fontWeight = FontWeight.Medium)
     }
 }
 
@@ -141,12 +311,22 @@ fun OverallStatsCard(
             }
 
             Spacer(modifier = Modifier.height(16.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
-                StatItem(value = stats.totalPushups.toString(), label = "Toplam Şınav")
-                StatItem(value = stats.totalWater.toString(), label = "Toplam Su (ml)")
-                StatItem(value = stats.currentStreak.toString(), label = "Seri (Gün)")
+            
+            // Stats Grid
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
+                    StatItem(value = stats.totalWorkouts.toString(), label = "Antrenman")
+                    StatItem(value = stats.totalPushups.toString(), label = "Şınav")
+                    StatItem(value = stats.currentStreak.toString(), label = "Seri (Gün)")
+                }
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
+                    StatItem(value = stats.totalWalkingMinutes.toString(), label = "Yürüyüş (dk)")
+                    StatItem(value = stats.totalLymphaticCount.toString(), label = "Lenfatik")
+                    StatItem(value = stats.totalWater.toString(), label = "Su (ml)")
+                }
             }
-            Spacer(modifier = Modifier.height(16.dp))
+
+            Spacer(modifier = Modifier.height(24.dp))
             
             Row(
                 modifier = Modifier
@@ -293,8 +473,8 @@ fun getExerciseName(type: Int): String {
 @Composable
 fun StatItem(value: String, label: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(text = value, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = ComposeColor.White)
-        Text(text = label, fontSize = 12.sp, color = ComposeColor.Gray)
+        Text(text = value, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = ComposeColor.White)
+        Text(text = label, fontSize = 11.sp, color = ComposeColor.Gray)
     }
 }
 

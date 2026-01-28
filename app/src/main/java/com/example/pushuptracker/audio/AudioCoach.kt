@@ -23,6 +23,12 @@ class AudioCoach @Inject constructor(
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private var audioFocusRequest: AudioFocusRequest? = null
 
+    // Ortak ses öznitelikleri (Kulaklık yönlendirmesi için kritik)
+    private val audioAttributes = AudioAttributes.Builder()
+        .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE) // Rehber ses kategorisi
+        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+        .build()
+
     init {
         try {
             tts = TextToSpeech(context, this)
@@ -34,6 +40,12 @@ class AudioCoach @Inject constructor(
     override fun onInit(status: Int) {
         if (status == TextToSpeech.SUCCESS) {
             val result = tts?.setLanguage(Locale.forLanguageTag("tr-TR"))
+            
+            // TTS için ses özniteliklerini ayarla (Bluetooth/Kulaklık yönlendirmesi sağlar)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                tts?.setAudioAttributes(audioAttributes)
+            }
+
             if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
                 Log.e("AudioCoach", "Turkish language not supported, falling back to English.")
                 tts?.setLanguage(Locale.US)
@@ -45,17 +57,12 @@ class AudioCoach @Inject constructor(
     }
 
     /**
-     * Ses odağını talep eder. Diğer medya seslerini durdurur.
+     * Ses odağını talep eder. Diğer medya seslerini (müzik vb.) kısar veya durdurur.
      */
     private fun requestFocus(): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val attributes = AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION) // Daha uyumlu sabit kullanıldı
-                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                .build()
-
-            audioFocusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
-                .setAudioAttributes(attributes)
+            audioFocusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+                .setAudioAttributes(audioAttributes)
                 .setAcceptsDelayedFocusGain(true)
                 .setOnAudioFocusChangeListener { /* No-op */ }
                 .build()
@@ -63,12 +70,12 @@ class AudioCoach @Inject constructor(
             audioManager.requestAudioFocus(audioFocusRequest!!) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
         } else {
             @Suppress("DEPRECATION")
-            audioManager.requestAudioFocus(null, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+            audioManager.requestAudioFocus(null, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
         }
     }
 
     /**
-     * Ses odağını bırakır. Diğer medya sesleri devam eder.
+     * Ses odağını bırakır.
      */
     private fun abandonFocus() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -82,6 +89,7 @@ class AudioCoach @Inject constructor(
     fun announceExercise(text: String) {
         if (isInitialized) {
             requestFocus()
+            // Konuşma sonunda odağı bırakma işlemini TTS motoru kuyruğuna güvenerek yapıyoruz
             tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "announcement")
         }
     }
@@ -95,7 +103,7 @@ class AudioCoach @Inject constructor(
                 delay(1000)
                 tts?.speak("1", TextToSpeech.QUEUE_FLUSH, null, "1")
                 delay(1000)
-                abandonFocus() // Sayma bitince müziği geri aç
+                abandonFocus()
             }
         }
     }

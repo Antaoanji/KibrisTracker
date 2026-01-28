@@ -5,6 +5,7 @@ import androidx.room.Room
 import com.example.pushuptracker.data.local.CustomWorkoutDao
 import com.example.pushuptracker.data.local.PushupDao
 import com.example.pushuptracker.data.local.WaterDao
+import com.example.pushuptracker.data.local.WorkoutRecordDao
 import com.example.pushuptracker.data.repo.PushupRepo
 import com.example.pushuptracker.data.repo.WaterRepo
 import com.example.pushuptracker.room.AppDatabase
@@ -45,6 +46,12 @@ object DatabaseModule {
     @Singleton
     fun provideCustomWorkoutDao(appDatabase: AppDatabase): CustomWorkoutDao {
         return appDatabase.customWorkoutDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideWorkoutRecordDao(appDatabase: AppDatabase): WorkoutRecordDao {
+        return appDatabase.workoutRecordDao()
     }
 
     @Provides

@@ -3,6 +3,7 @@ package com.example.pushuptracker.ui.profile
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.pushuptracker.SettingsManager
+import com.example.pushuptracker.data.local.WorkoutRecordDao
 import com.example.pushuptracker.data.repo.PushupRepo
 import com.example.pushuptracker.data.repo.WaterRepo
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -17,11 +18,11 @@ import javax.inject.Inject
 class ProfileViewModel @Inject constructor(
     private val settingsManager: SettingsManager,
     private val pushupRepo: PushupRepo,
-    private val waterRepo: WaterRepo
+    private val waterRepo: WaterRepo,
+    private val workoutRecordDao: WorkoutRecordDao
 ) : ViewModel() {
 
     val age: Flow<Int> = settingsManager.ageFlow
-    val weight: Flow<Int> = settingsManager.weightFlow
     val gender: Flow<String> = settingsManager.genderFlow
     val goal: Flow<String> = settingsManager.goalFlow
     val workoutFrequency: Flow<String> = settingsManager.workoutFrequencyFlow
@@ -35,7 +36,6 @@ class ProfileViewModel @Inject constructor(
     val waterReminderFrequency: Flow<Int> = settingsManager.waterReminderFrequencyFlow
 
     fun saveAge(age: Int) = viewModelScope.launch { settingsManager.saveAge(age) }
-    fun saveWeight(weight: Int) = viewModelScope.launch { settingsManager.saveWeight(weight) }
     fun saveGender(gender: String) = viewModelScope.launch { settingsManager.saveGender(gender) }
     fun saveGoal(goal: String) = viewModelScope.launch { settingsManager.saveGoal(goal) }
     fun saveWorkoutFrequency(frequency: String) = viewModelScope.launch { settingsManager.saveWorkoutFrequency(frequency) }
@@ -61,5 +61,6 @@ class ProfileViewModel @Inject constructor(
         settingsManager.clearAllData()
         pushupRepo.clear()
         waterRepo.clear()
+        workoutRecordDao.clear() // Heatmap verilerini de sıfırla
     }
 }

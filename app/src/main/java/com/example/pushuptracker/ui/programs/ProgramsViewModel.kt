@@ -40,15 +40,32 @@ class ProgramsViewModel @Inject constructor(
     private val _workoutDetails = MutableStateFlow<Workout?>(null)
     val workoutDetails = _workoutDetails.asStateFlow()
 
-    // Haftalık tamamlanan antrenmanları takip et
-    private val completedWorkoutsThisWeek: Flow<Set<String>> = pushupRepo.getAllRecords().map { records ->
+    init {
+        // En son seçilen programı yükle
+        viewModelScope.launch {
+            val lastType = settingsManager.lastSelectedProgramTypeFlow.first()
+            _selectedProgram.value = ProgramType.valueOf(lastType)
+        }
+    }
+
+    // Haftalık tamamlanan antrenmanları takip et (Sadece seçili programa ait olanlar)
+    private val completedWorkoutsThisWeek: Flow<Set<String>> = combine(
+        pushupRepo.getAllRecords(),
+        _selectedProgram
+    ) { records, currentProgram ->
         val monday = LocalDate.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
-        records.filter { 
+        val currentPrefix = currentProgram.name
+
+        records.filter {
             try {
                 val date = LocalDate.parse(it.date)
-                !date.isBefore(monday) 
+                // Bu hafta mı? VE Mevcut programa mı ait?
+                !date.isBefore(monday) && it.type.startsWith(currentPrefix)
             } catch (e: Exception) { false }
-        }.map { it.type.uppercase(Locale.getDefault()) }.toSet()
+        }.map {
+            // Sadece son eki al (PUSH, PULL vb.)
+            it.type.removePrefix("${currentPrefix}_").uppercase(Locale.getDefault())
+        }.toSet()
     }
 
     // Health Connect'ten gelen son antrenman kalorisini tutan akış
@@ -91,6 +108,9 @@ class ProgramsViewModel @Inject constructor(
 
     fun selectProgram(type: ProgramType) {
         _selectedProgram.value = type
+        viewModelScope.launch {
+            settingsManager.saveLastSelectedProgramType(type.name)
+        }
     }
 
     fun handleVoiceCommand(programType: String?, dayName: String?) {
@@ -100,7 +120,7 @@ class ProgramsViewModel @Inject constructor(
                 programType?.contains("kendi", ignoreCase = true) == true -> ProgramType.CALISTHENICS_WEIGHT
                 else -> ProgramType.MACHINE_WEIGHT
             }
-            _selectedProgram.value = type
+            selectProgram(type) // saveLastSelectedProgramType'ı da tetikler
 
             val dayIndex = when {
                 dayName?.contains("pazartesi", ignoreCase = true) == true -> 0
@@ -152,7 +172,10 @@ class ProgramsViewModel @Inject constructor(
         viewModelScope.launch {
             _eventState.update { it.copy(isLoading = true) }
             val programTypeStr = _selectedProgram.value.name
-            
+
+            // Programı kalıcı olarak kaydet
+            settingsManager.saveLastSelectedProgramType(programTypeStr)
+
             val workoutId = customWorkoutRepository.ensureWorkoutExists(programTypeStr, dayIndex)
             
             customWorkoutRepository.getExercisesByWorkoutId(workoutId).collect { exercises ->
@@ -164,7 +187,6 @@ class ProgramsViewModel @Inject constructor(
                     4 -> "LOWER"
                     else -> "CUSTOM"
                 }
-                val title = if (_selectedProgram.value == ProgramType.MACHINE_WEIGHT) "Makine" else "Calisthenics"
                 val workout = Workout(title = "${programTypeStr}_${workoutType}", exercises = exercises)
                 
                 workoutHolder.workout = workout

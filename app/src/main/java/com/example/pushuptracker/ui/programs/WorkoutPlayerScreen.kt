@@ -67,7 +67,6 @@ fun WorkoutPlayerScreen(
     viewModel: WorkoutPlayerViewModel = hiltViewModel()
 ) {
     val state by viewModel.workoutState.collectAsStateWithLifecycle()
-    val isSwapping by viewModel.isSwapping.collectAsStateWithLifecycle()
     val selectedBar by viewModel.selectedBarWeight.collectAsStateWithLifecycle()
     val selectedPlates by viewModel.selectedPlates.collectAsStateWithLifecycle()
     val totalWeight by viewModel.totalCalculatedWeight.collectAsStateWithLifecycle()
@@ -153,7 +152,6 @@ fun WorkoutPlayerScreen(
                         coachSuggestion = currentState.coachSuggestion,
                         remainingTime = currentState.remainingExerciseTime,
                         isTimerPaused = currentState.isTimerPaused,
-                        isSwapping = isSwapping,
                         selectedBar = selectedBar,
                         selectedPlates = selectedPlates,
                         totalWeight = totalWeight,
@@ -164,7 +162,6 @@ fun WorkoutPlayerScreen(
                         onPlateRemove = { viewModel.removePlateAt(it) },
                         onMachineModeSelect = { viewModel.setMachineMode(it) },
                         onMachineLevelSelect = { viewModel.setMachineLevel(it) },
-                        onSwap = { viewModel.swapCurrentExercise() },
                         onRestartTimer = { viewModel.restartExerciseTimer() },
                         onToggleTimer = { viewModel.toggleExerciseTimer() },
                         onSetFinished = { difficulty, note, reps ->
@@ -217,7 +214,6 @@ fun ExerciseScreen(
     coachSuggestion: String?,
     remainingTime: Int?,
     isTimerPaused: Boolean,
-    isSwapping: Boolean,
     selectedBar: Double,
     selectedPlates: List<Double>,
     totalWeight: Double,
@@ -228,7 +224,6 @@ fun ExerciseScreen(
     onPlateRemove: (Int) -> Unit,
     onMachineModeSelect: (String) -> Unit,
     onMachineLevelSelect: (Int) -> Unit,
-    onSwap: () -> Unit,
     onRestartTimer: () -> Unit,
     onToggleTimer: () -> Unit,
     onSetFinished: (difficulty: String, note: String?, actualReps: Int?) -> Unit
@@ -275,7 +270,6 @@ fun ExerciseScreen(
                     } else {
                         Text(text = "$set. Set", style = MaterialTheme.typography.headlineMedium.copy(color = Color.White, fontWeight = FontWeight.ExtraBold))
                         Text(text = "Hedef: ${exercise.reps}", style = MaterialTheme.typography.titleMedium.copy(color = Color.White.copy(alpha = 0.7f)))
-                        IconButton(onClick = onSwap) { Icon(Icons.Default.Refresh, null, tint = Color.White.copy(alpha = 0.5f), modifier = Modifier.size(16.dp)) }
                     }
                 }
             }

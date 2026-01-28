@@ -16,10 +16,6 @@ class SettingsManager @Inject constructor(private val dataStore: DataStore<Prefe
     val ageFlow: Flow<Int> = dataStore.data.map { it[ageKey] ?: 30 }
     suspend fun saveAge(age: Int) = dataStore.edit { it[ageKey] = age }
 
-    private val weightKey = intPreferencesKey("user_weight")
-    val weightFlow: Flow<Int> = dataStore.data.map { it[weightKey] ?: 70 }
-    suspend fun saveWeight(weight: Int) = dataStore.edit { it[weightKey] = weight }
-
     private val genderKey = stringPreferencesKey("user_gender")
     val genderFlow: Flow<String> = dataStore.data.map { it[genderKey] ?: "Erkek" }
     suspend fun saveGender(gender: String) = dataStore.edit { it[genderKey] = gender }
@@ -38,6 +34,14 @@ class SettingsManager @Inject constructor(private val dataStore: DataStore<Prefe
 
     private val activeWorkoutCurrentDayKey = intPreferencesKey("active_workout_current_day")
     val activeWorkoutCurrentDayFlow: Flow<Int> = dataStore.data.map { it[activeWorkoutCurrentDayKey] ?: 1 }
+
+    // En son seçilen program türü (MACHINE_WEIGHT veya CALISTHENICS_WEIGHT)
+    private val lastSelectedProgramTypeKey = stringPreferencesKey("last_selected_program_type")
+    val lastSelectedProgramTypeFlow: Flow<String> = dataStore.data.map { it[lastSelectedProgramTypeKey] ?: "MACHINE_WEIGHT" }
+
+    suspend fun saveLastSelectedProgramType(type: String) {
+        dataStore.edit { it[lastSelectedProgramTypeKey] = type }
+    }
 
     suspend fun saveActiveWorkout(plan: String, day: Int) {
         dataStore.edit {

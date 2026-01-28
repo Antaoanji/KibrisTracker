@@ -7,7 +7,6 @@ import androidx.lifecycle.viewModelScope
 import com.example.pushuptracker.SettingsManager
 import com.example.pushuptracker.UpdateInfo
 import com.example.pushuptracker.UpdateManager
-import com.example.pushuptracker.ai.PushupSensorManager
 import com.example.pushuptracker.audio.WorkoutService
 import com.example.pushuptracker.data.repo.PushupRepo
 import com.example.pushuptracker.data.repo.WaterRepo
@@ -15,6 +14,7 @@ import com.example.pushuptracker.gamification.GamificationManager
 import com.example.pushuptracker.model.ActivityRecord
 import com.example.pushuptracker.model.Streak
 import com.example.pushuptracker.model.WorkoutSummary
+import com.example.pushuptracker.sensor.PushupSensorManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch

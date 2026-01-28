@@ -63,7 +63,6 @@ import java.time.format.DateTimeFormatter
 
 @Composable
 fun ProfileScreen(viewModel: ProfileViewModel = hiltViewModel()) {
-    val weight by viewModel.weight.collectAsStateWithLifecycle(70)
     val dailyGoal by viewModel.dailyGoal.collectAsStateWithLifecycle(50)
     val dailyWaterGoal by viewModel.dailyWaterGoal.collectAsStateWithLifecycle(2000)
     val workoutReminderEnabled by viewModel.workoutReminderEnabled.collectAsStateWithLifecycle(false)
@@ -73,7 +72,6 @@ fun ProfileScreen(viewModel: ProfileViewModel = hiltViewModel()) {
     val waterReminderEnabled by viewModel.waterReminderEnabled.collectAsStateWithLifecycle(false)
     val waterReminderFrequency by viewModel.waterReminderFrequency.collectAsStateWithLifecycle(120)
 
-    var weightInput by remember(weight) { mutableStateOf(weight.toString()) }
     var showResetDialog by remember { mutableStateOf(false) }
     var showCheckAnimation by remember { mutableStateOf(false) }
     var showWaterReminderDialog by remember { mutableStateOf(false) }
@@ -125,44 +123,8 @@ fun ProfileScreen(viewModel: ProfileViewModel = hiltViewModel()) {
                 modifier = Modifier.fillMaxSize().padding(padding),
                 contentPadding = PaddingValues(16.dp)
             ) {
-                // --- User Profile Section ---
-                item {
-                    SectionTitle(title = "Kullanıcı Profili")
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        OutlinedTextField(
-                            value = weightInput,
-                            onValueChange = { weightInput = it },
-                            label = { Text("Vücut Ağırlığı (kg)") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.weight(1f),
-                            colors = transparentTextFieldColors()
-                        )
-                        Button(
-                            onClick = {
-                                weightInput.toIntOrNull()?.let { viewModel.saveWeight(it) }
-                                showCheckAnimation = true
-                            },
-                            modifier = Modifier.padding(start = 8.dp)
-                        ) {
-                            Text("Güncelle")
-                        }
-                    }
-                    Text(
-                        text = "Kilonuz antrenman sırasında yakılan kaloriyi hesaplamak için kullanılır.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
-                }
-
                 // --- Daily Goals Section ---
                 item {
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
                     SectionTitle(title = "Günlük Hedefler")
                     Spacer(modifier = Modifier.height(16.dp))
                     GoalInput(label = "Günlük Şınav Hedefi", currentGoal = dailyGoal) {

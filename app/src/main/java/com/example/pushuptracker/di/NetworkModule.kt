@@ -1,7 +1,6 @@
 package com.example.pushuptracker.di
 
 import com.example.pushuptracker.BuildConfig
-import com.example.pushuptracker.ai.GeminiApiService
 import com.example.pushuptracker.data.remote.GithubApiService
 import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
 import dagger.Module
@@ -19,17 +18,12 @@ import javax.inject.Singleton
 
 @Qualifier
 @Retention(AnnotationRetention.BINARY)
-annotation class GeminiRetrofit
-
-@Qualifier
-@Retention(AnnotationRetention.BINARY)
 annotation class GithubRetrofit
 
 @Module
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
 
-    private const val GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/"
     private const val GITHUB_BASE_URL = "https://api.github.com/"
 
     @Provides
@@ -51,42 +45,12 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    @GeminiRetrofit
-    fun provideGeminiOkHttpClient(): OkHttpClient {
-        return OkHttpClient.Builder()
-            .addInterceptor { chain ->
-                val original = chain.request()
-                val requestBuilder = original.newBuilder()
-                    .header("x-goog-api-key", BuildConfig.GEMINI_API_KEY)
-                val request = requestBuilder.build()
-                chain.proceed(request)
-            }
-            .addInterceptor(provideLoggingInterceptor())
-            .connectTimeout(60, TimeUnit.SECONDS)
-            .readTimeout(60, TimeUnit.SECONDS)
-            .writeTimeout(60, TimeUnit.SECONDS)
-            .build()
-    }
-
-    @Provides
-    @Singleton
     @GithubRetrofit
     fun provideGithubOkHttpClient(): OkHttpClient {
         return OkHttpClient.Builder()
             .addInterceptor(provideLoggingInterceptor())
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(15, TimeUnit.SECONDS)
-            .build()
-    }
-
-    @Provides
-    @Singleton
-    @GeminiRetrofit
-    fun provideGeminiRetrofit(@GeminiRetrofit okHttpClient: OkHttpClient, json: Json): Retrofit {
-        return Retrofit.Builder()
-            .baseUrl(GEMINI_BASE_URL)
-            .client(okHttpClient)
-            .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
             .build()
     }
 
@@ -99,12 +63,6 @@ object NetworkModule {
             .client(okHttpClient)
             .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
             .build()
-    }
-
-    @Provides
-    @Singleton
-    fun provideGeminiApiService(@GeminiRetrofit retrofit: Retrofit): GeminiApiService {
-        return retrofit.create(GeminiApiService::class.java)
     }
 
     @Provides

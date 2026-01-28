@@ -9,21 +9,19 @@ import android.util.Log
 import android.view.KeyEvent
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.pushuptracker.BuildConfig
 import com.example.pushuptracker.SettingsManager
 import com.example.pushuptracker.audio.AudioCoach
 import com.example.pushuptracker.audio.VoiceCommandManager
 import com.example.pushuptracker.audio.WorkoutService
+import com.example.pushuptracker.data.local.WorkoutRecordDao
 import com.example.pushuptracker.data.repo.PushupRepo
 import com.example.pushuptracker.di.WorkoutHolder
 import com.example.pushuptracker.gamification.GamificationManager
 import com.example.pushuptracker.model.ActivityRecord
 import com.example.pushuptracker.model.Exercise
+import com.example.pushuptracker.model.WorkoutRecord
 import com.example.pushuptracker.model.WorkoutSummary
-import com.google.ai.client.generativeai.GenerativeModel
-import com.google.ai.client.generativeai.type.content
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
@@ -65,6 +63,7 @@ class WorkoutPlayerViewModel @Inject constructor(
     private val settingsManager: SettingsManager,
     private val audioCoach: AudioCoach,
     private val pushupRepo: PushupRepo,
+    private val workoutRecordDao: WorkoutRecordDao,
     private val gamificationManager: GamificationManager,
     private val voiceCommandManager: VoiceCommandManager
 ) : AndroidViewModel(application) {
@@ -73,9 +72,6 @@ class WorkoutPlayerViewModel @Inject constructor(
 
     private val _workoutState = MutableStateFlow<WorkoutState>(WorkoutState.Loading)
     val workoutState = _workoutState.asStateFlow()
-
-    private val _isSwapping = MutableStateFlow(false)
-    val isSwapping = _isSwapping.asStateFlow()
 
     private val _selectedBarWeight = MutableStateFlow(0.0)
     val selectedBarWeight = _selectedBarWeight.asStateFlow()
@@ -94,11 +90,6 @@ class WorkoutPlayerViewModel @Inject constructor(
 
     val newBadgeUnlocked = gamificationManager.newBadgeUnlocked
 
-    private val generativeModel = GenerativeModel(
-        modelName = "gemini-2.0-flash",
-        apiKey = BuildConfig.GEMINI_API_KEY
-    )
-
     private var timerJob: Job? = null
     private var exerciseTimerJob: Job? = null
     private var stateUpdateJob: Job? = null
@@ -108,7 +99,7 @@ class WorkoutPlayerViewModel @Inject constructor(
 
     init {
         loadStateAndStart()
-        // startVoiceCommandMonitoring() // Geçici olarak devre dışı bırakıldı
+        startVoiceCommandMonitoring()
     }
 
     private fun startVoiceCommandMonitoring() {
@@ -366,24 +357,6 @@ class WorkoutPlayerViewModel @Inject constructor(
         }
     }
 
-    fun swapCurrentExercise() = viewModelScope.launch {
-        if (_isSwapping.value) return@launch
-        val state = _workoutState.value
-        if (state !is WorkoutState.InProgress) return@launch
-        _isSwapping.value = true
-        try {
-            val response = generativeModel.generateContent("I cannot do '${state.exercise.name}'. Suggest ONE alternative exercise name targeting the same muscle group. Output ONLY the exercise name in English.")
-            val newExName = response.text?.trim()
-            if (!newExName.isNullOrBlank()) {
-                val workout = workoutHolder.workout ?: return@launch
-                val updated = workout.exercises.toMutableList()
-                updated[workoutHolder.currentExerciseIndex] = updated[workoutHolder.currentExerciseIndex].copy(name = newExName, searchKey = newExName.lowercase().replace(" ", "-"))
-                workoutHolder.workout = workout.copy(exercises = updated)
-                updateStateWithHistory(updated[workoutHolder.currentExerciseIndex], workoutHolder.currentSetIndex)
-            }
-        } catch (e: Exception) { e.printStackTrace() } finally { _isSwapping.value = false }
-    }
-
     private fun finishWorkout(isPlanFinished: Boolean) {
         voiceCommandManager.stopListening()
         val stopIntent = Intent(getApplication(), WorkoutService::class.java).apply { action = "STOP" }
@@ -392,7 +365,34 @@ class WorkoutPlayerViewModel @Inject constructor(
         val totalTimeMinutes = ((System.currentTimeMillis() - startTimeMillis) / 60000).toInt()
         _workoutState.value = WorkoutState.Finished(totalTimeMinutes, sessionVolume, getDominantDifficulty())
         viewModelScope.launch {
-            workoutHolder.workout?.title?.let { settingsManager.saveLastWorkoutSummary(WorkoutSummary(it, totalTimeMinutes, 0, System.currentTimeMillis())) }
+            val workoutTitle = workoutHolder.workout?.title ?: "CUSTOM"
+            val summary = WorkoutSummary(workoutTitle, totalTimeMinutes, 0, System.currentTimeMillis())
+            
+            // Save to DataStore
+            settingsManager.saveLastWorkoutSummary(summary)
+            
+            // Save to WorkoutRecord for Heatmap
+            val todayDate = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+            workoutRecordDao.insertRecord(
+                WorkoutRecord(
+                    title = workoutTitle,
+                    durationMinutes = totalTimeMinutes,
+                    date = todayDate,
+                    timestamp = System.currentTimeMillis()
+                )
+            )
+            
+            // PROGRAM EKRANINDAKİ TİK İÇİN: Tam antrenman ismini ActivityRecord olarak da kaydet
+            pushupRepo.insertRecord(
+                ActivityRecord(
+                    type = workoutTitle, // Örn: MACHINE_WEIGHT_PUSH
+                    value = 1.0, // Tamamlandığını belirtmek için 1
+                    date = todayDate,
+                    timestamp = System.currentTimeMillis(),
+                    note = "Workout Completed"
+                )
+            )
+
             if (isPlanFinished || workoutHolder.currentDay.value >= 7) {
                 settingsManager.clearActiveWorkout(); workoutHolder.clearWorkout()
             } else {

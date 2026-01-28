@@ -33,16 +33,9 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = 1
-        versionName = "2.4"
+        versionName = "2.5"
 
         testInstrumentationRunner = "com.google.dagger.hilt.android.testing.HiltTestRunner"
-
-        // Make the API key available in the BuildConfig
-        buildConfigField(
-            "String",
-            "GEMINI_API_KEY",
-            "\"${localProperties.getProperty("GEMINI_API_KEY")}\""
-        )
     }
 
     buildTypes {
@@ -124,7 +117,7 @@ dependencies {
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
 
-    // Networking & AI
+    // Networking
     implementation(libs.retrofit)
     implementation("com.jakewharton.retrofit:retrofit2-kotlinx-serialization-converter:1.0.0")
     implementation(libs.okhttp)
@@ -151,7 +144,7 @@ dependencies {
     // Health Connect
     implementation(libs.androidx.health.connect.client)
 
-    // YouTube Player - NEW
+    // YouTube Player
     implementation("com.pierfrancescosoffritti.androidyoutubeplayer:core:12.1.1")
 
     // Testing
@@ -167,5 +160,4 @@ dependencies {
 
     // Debug
     debugImplementation(libs.androidx.ui.tooling)
-    implementation("com.google.ai.client.generativeai:generativeai:0.9.0")
 }

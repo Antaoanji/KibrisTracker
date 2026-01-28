@@ -5,15 +5,19 @@ import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.pushuptracker.data.HealthConnectManager
+import com.example.pushuptracker.data.local.WorkoutRecordDao
 import com.example.pushuptracker.data.repo.PushupRepo
 import com.example.pushuptracker.model.ActivityRecord
+import com.example.pushuptracker.model.WorkoutRecord
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.temporal.ChronoUnit
 import java.time.temporal.WeekFields
 import java.util.Locale
 import javax.inject.Inject
@@ -30,6 +34,9 @@ data class OverallStats(
     val totalPushups: Int = 0,
     val totalWater: Int = 0,
     val totalCalories: Int = 0,
+    val totalWorkouts: Int = 0,
+    val totalWalkingMinutes: Int = 0,
+    val totalLymphaticCount: Int = 0,
     val currentStreak: Int = 0
 )
 
@@ -45,6 +52,7 @@ data class ChangeStats(
 @HiltViewModel
 class StatsViewModel @Inject constructor(
     private val pushupRepo: PushupRepo,
+    private val workoutRecordDao: WorkoutRecordDao,
     private val healthConnectManager: HealthConnectManager
 ) : ViewModel() {
 
@@ -66,6 +74,31 @@ class StatsViewModel @Inject constructor(
 
     val exerciseList = pushupRepo.getDistinctExerciseTypes()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), listOf("pushup"))
+
+    // Heatmap verisi - Kesin ve Anlık
+    val heatmapData: StateFlow<Map<String, String>> = combine(
+        workoutRecordDao.getAllRecords(),
+        pushupRepo.getAllRecords()
+    ) { workoutRecords, activityRecords ->
+        val dataMap = mutableMapOf<String, String>()
+
+        // 1. Önce ActivityRecords üzerinden genel antrenmanları tara
+        activityRecords.forEach { record ->
+            val type = record.type.uppercase()
+            if (type.contains("PUSH") || type.contains("PULL") || type.contains("LEGS") ||
+                type.contains("UPPER") || type.contains("LOWER") || type == "WORKOUT_COMPLETED") {
+                dataMap[record.date] = record.type // Eğer başlık PUSH içeriyorsa onu al
+            }
+        }
+
+        // 2. WorkoutRecords tablosundaki özel başlıklar her zaman önceliklidir
+        workoutRecords.forEach { record ->
+            dataMap[record.date] = record.title
+        }
+
+        Log.d("HeatmapData", "Syncing Heatmap: ${dataMap.keys.joinToString(", ")}")
+        dataMap
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
     init {
         checkHealthPermissions()
@@ -89,10 +122,7 @@ class StatsViewModel @Inject constructor(
         viewModelScope.launch {
             _isRefreshing.value = true
             try {
-                // 1. Antrenman seanslarını oku (Sadece UI için)
                 _healthSessions.value = healthConnectManager.readExerciseSessions()
-
-                // 2. Son 30 günlük kalorileri oku ve DB'ye KAYDET
                 val caloriesMap = healthConnectManager.readDailyCalories(
                     start = Instant.now().minusSeconds(30 * 24 * 60 * 60),
                     end = Instant.now()
@@ -129,6 +159,8 @@ class StatsViewModel @Inject constructor(
                 "pushup" -> "Tekrar"
                 "calories" -> "kcal"
                 "water" -> "ml"
+                "walking" -> "dk"
+                "lymphatic" -> "Tekrar"
                 else -> "Değer"
             }
             ChartUiState(records, yAxisLabel)
@@ -137,91 +169,112 @@ class StatsViewModel @Inject constructor(
 
     val overallStats = combine(
         pushupRepo.getAllRecords(),
-        pushupRepo.getRecordsByType("calories")
-    ) { records, calorieRecords ->
+        pushupRepo.getRecordsByType("calories"),
+        workoutRecordDao.getAllRecords()
+    ) { records, calorieRecords, workoutRecords ->
         val totalPushups = records.filter { it.type == "pushup" }.sumOf { it.value }.toInt()
         val totalWater = records.filter { it.type == "water" }.sumOf { it.value }.toInt()
         val totalCalories = calorieRecords.sumOf { it.value }.toInt()
         
-        val pushupDates = records.filter { it.type == "pushup" && it.value > 0 }
-            .mapNotNull { 
-                try { LocalDate.parse(it.date) } catch (e: Exception) { null }
-            }.distinct().sortedDescending()
+        val totalWorkouts = workoutRecords.size
+        val totalWalkingMinutes = records.filter { it.type == "walking" }.sumOf { it.value }.toInt()
+        val totalLymphaticCount = records.filter { it.type == "lymphatic" }.size
 
-        var currentStreak = 0
-        if (pushupDates.isNotEmpty()) {
-            val currentDate = LocalDate.now()
-            if (pushupDates.first().isEqual(currentDate) || pushupDates.first().isEqual(currentDate.minusDays(1))) {
-                currentStreak = 1
-                var lastDate = pushupDates.first()
+        // Calculate workout-based streak
+        val workoutDates = workoutRecords.mapNotNull {
+            try { LocalDate.parse(it.date) } catch (e: Exception) { null }
+        }.distinct().sortedDescending()
 
-                for (i in 1 until pushupDates.size) {
-                    val date = pushupDates[i]
-                    if (lastDate.minusDays(1).isEqual(date)) {
-                        currentStreak++
-                        lastDate = date
-                    } else {
-                        break
-                    }
-                }
-            }
-        }
+        val currentStreak = calculateWorkoutStreak(workoutDates)
+
         OverallStats(
             totalPushups = totalPushups, 
             totalWater = totalWater, 
             totalCalories = totalCalories,
+            totalWorkouts = totalWorkouts,
+            totalWalkingMinutes = totalWalkingMinutes,
+            totalLymphaticCount = totalLymphaticCount,
             currentStreak = currentStreak
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), OverallStats())
 
+    private fun calculateWorkoutStreak(dates: List<LocalDate>): Int {
+        if (dates.isEmpty()) return 0
 
-    val weeklyChange = selectedExercise.flatMapLatest { exerciseType ->
-        pushupRepo.getRecordsByType(exerciseType)
-    }.map { records ->
+        val workoutDays = setOf(DayOfWeek.MONDAY, DayOfWeek.TUESDAY, DayOfWeek.WEDNESDAY, DayOfWeek.FRIDAY, DayOfWeek.SATURDAY)
+        val today = LocalDate.now()
+
+        var checkDate = today
+        if (!workoutDays.contains(checkDate.dayOfWeek) || !dates.contains(checkDate)) {
+            checkDate = getPreviousExpectedWorkoutDay(checkDate)
+        }
+
+        if (!dates.contains(checkDate)) {
+            return 0
+        }
+
+        var streak = 0
+        var currentIdxDate = checkDate
+
+        while (true) {
+            if (workoutDays.contains(currentIdxDate.dayOfWeek)) {
+                if (dates.contains(currentIdxDate)) {
+                    streak++
+                } else {
+                    break
+                }
+            }
+            currentIdxDate = currentIdxDate.minusDays(1)
+            if (streak > 1000) break
+        }
+
+        return streak
+    }
+
+    private fun getPreviousExpectedWorkoutDay(date: LocalDate): LocalDate {
+        val workoutDays = setOf(DayOfWeek.MONDAY, DayOfWeek.TUESDAY, DayOfWeek.WEDNESDAY, DayOfWeek.FRIDAY, DayOfWeek.SATURDAY)
+        var d = date.minusDays(1)
+        while (!workoutDays.contains(d.dayOfWeek)) {
+            d = d.minusDays(1)
+        }
+        return d
+    }
+
+    val weeklyChange = workoutRecordDao.getAllRecords().map { records ->
         val today = LocalDate.now()
         val weekFields = WeekFields.of(Locale.getDefault())
         val startOfThisWeek = today.with(weekFields.dayOfWeek(), 1)
         val startOfLastWeek = startOfThisWeek.minusWeeks(1)
 
-        val thisWeekValue = records.filter {
-            try {
-                val date = LocalDate.parse(it.date)
-                !date.isBefore(startOfThisWeek) && date.isBefore(startOfThisWeek.plusWeeks(1))
-            } catch (e: Exception) { false }
-        }.sumOf { it.value }.toInt()
+        val thisWeekCount = records.filter {
+            val date = try { LocalDate.parse(it.date) } catch (e: Exception) { null }
+            date != null && !date.isBefore(startOfThisWeek) && date.isBefore(startOfThisWeek.plusWeeks(1))
+        }.size
 
-        val lastWeekValue = records.filter {
-            try {
-                val date = LocalDate.parse(it.date)
-                !date.isBefore(startOfLastWeek) && date.isBefore(startOfThisWeek)
-            } catch (e: Exception) { false }
-        }.sumOf { it.value }.toInt()
+        val lastWeekCount = records.filter {
+            val date = try { LocalDate.parse(it.date) } catch (e: Exception) { null }
+            date != null && !date.isBefore(startOfLastWeek) && date.isBefore(startOfThisWeek)
+        }.size
 
-        ChangeStats(previous = lastWeekValue, current = thisWeekValue)
+        ChangeStats(previous = lastWeekCount, current = thisWeekCount)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ChangeStats())
 
-    val monthlyChange = selectedExercise.flatMapLatest { exerciseType ->
-        pushupRepo.getRecordsByType(exerciseType)
-    }.map { records ->
+    val monthlyChange = workoutRecordDao.getAllRecords().map { records ->
         val today = LocalDate.now()
         val startOfThisMonth = today.withDayOfMonth(1)
         val startOfLastMonth = startOfThisMonth.minusMonths(1)
 
-        val thisMonthValue = records.filter {
-            try {
-                val date = LocalDate.parse(it.date)
-                !date.isBefore(startOfThisMonth) && date.isBefore(startOfThisMonth.plusWeeks(1))
-            } catch (e: Exception) { false }
-        }.sumOf { it.value }.toInt()
+        val thisMonthCount = records.filter {
+            val date = try { LocalDate.parse(it.date) } catch (e: Exception) { null }
+            date != null && !date.isBefore(startOfThisMonth) && date.isBefore(startOfThisMonth.plusWeeks(1))
+        }.size
 
-        val lastMonthValue = records.filter {
-            try {
-                val date = LocalDate.parse(it.date)
-                !date.isBefore(startOfLastMonth) && date.isBefore(startOfThisMonth)
-            } catch (e: Exception) { false }
-        }.sumOf { it.value }.toInt()
+        val lastMonthCount = records.filter {
+            val date = try { LocalDate.parse(it.date) } catch (e: Exception) { null }
+            date != null && !date.isBefore(startOfLastMonth) && date.isBefore(startOfThisMonth)
+        }.size
 
-        ChangeStats(previous = lastMonthValue, current = thisMonthValue)
+        ChangeStats(previous = lastMonthCount, current = thisMonthCount)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ChangeStats())
 
 

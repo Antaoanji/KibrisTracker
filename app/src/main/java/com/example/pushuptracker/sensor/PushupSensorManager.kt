@@ -1,4 +1,4 @@
-package com.example.pushuptracker.ai
+package com.example.pushuptracker.sensor
 
 import android.content.Context
 import android.hardware.Sensor
