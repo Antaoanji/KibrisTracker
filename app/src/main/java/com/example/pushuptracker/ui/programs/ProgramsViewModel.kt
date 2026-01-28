@@ -48,7 +48,7 @@ class ProgramsViewModel @Inject constructor(
                 val date = LocalDate.parse(it.date)
                 !date.isBefore(monday) 
             } catch (e: Exception) { false }
-        }.map { it.type.uppercase(Locale.getDefault()) }.toSet() // Hepsi büyük harf yapıldı
+        }.map { it.type.uppercase(Locale.getDefault()) }.toSet()
     }
 
     // Health Connect'ten gelen son antrenman kalorisini tutan akış
@@ -78,7 +78,7 @@ class ProgramsViewModel @Inject constructor(
             currentDay = currentDay,
             lastWorkoutSummary = summary?.copy(caloriesBurned = realCalories),
             selectedProgram = program,
-            completedWorkoutTypes = completedTitles // Artık büyük harf setleri geliyor
+            completedWorkoutTypes = completedTitles
         )
     }.stateIn(
         scope = viewModelScope,
@@ -156,8 +156,16 @@ class ProgramsViewModel @Inject constructor(
             val workoutId = customWorkoutRepository.ensureWorkoutExists(programTypeStr, dayIndex)
             
             customWorkoutRepository.getExercisesByWorkoutId(workoutId).collect { exercises ->
+                val workoutType = when(dayIndex) {
+                    0 -> "PUSH"
+                    1 -> "PULL"
+                    2 -> "LEGS"
+                    3 -> "UPPER"
+                    4 -> "LOWER"
+                    else -> "CUSTOM"
+                }
                 val title = if (_selectedProgram.value == ProgramType.MACHINE_WEIGHT) "Makine" else "Calisthenics"
-                val workout = Workout(title = "$title - Gün ${dayIndex + 1}", exercises = exercises)
+                val workout = Workout(title = "${programTypeStr}_${workoutType}", exercises = exercises)
                 
                 workoutHolder.workout = workout
                 workoutHolder.currentExerciseIndex = 0

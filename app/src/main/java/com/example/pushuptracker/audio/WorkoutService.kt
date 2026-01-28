@@ -12,6 +12,7 @@ import androidx.core.app.NotificationCompat
 import com.example.pushuptracker.MainActivity
 import com.example.pushuptracker.R
 import com.example.pushuptracker.data.repo.PushupRepo
+import com.example.pushuptracker.gamification.GamificationManager
 import com.example.pushuptracker.model.ActivityRecord
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.*
@@ -30,6 +31,9 @@ class WorkoutService : Service() {
     
     @Inject
     lateinit var pushupRepo: PushupRepo
+
+    @Inject
+    lateinit var gamificationManager: GamificationManager
 
     private val binder = WorkoutBinder()
     private val notificationId = 1001
@@ -55,7 +59,8 @@ class WorkoutService : Service() {
         val remainingSeconds: Int,
         val isPaused: Boolean,
         val movementName: String,
-        val movementDescription: String
+        val movementDescription: String,
+        val isPreparing: Boolean = false
     )
 
     private val lymphaticMovements = listOf(
@@ -175,7 +180,8 @@ class WorkoutService : Service() {
     }
 
     private fun startLymphaticTimer() {
-        _lymphaticState.value = LymphaticState(0, 60, false, lymphaticMovements[0].first, lymphaticMovements[0].second)
+        val first = lymphaticMovements[0]
+        _lymphaticState.value = LymphaticState(0, 60, false, first.first, first.second, isPreparing = true)
         _timerState.value = null
         _walkingState.value = null
         runLymphaticTimer()
@@ -190,10 +196,10 @@ class WorkoutService : Service() {
                 currentMovementIndex = nextIndex,
                 remainingSeconds = 60,
                 movementName = nextMovement.first,
-                movementDescription = nextMovement.second
+                movementDescription = nextMovement.second,
+                isPreparing = true
             )
-            audioCoach.announceExercise("Sıradaki hareket: ${nextMovement.first}")
-            runLymphaticTimer() // Restart timer job if needed
+            runLymphaticTimer() 
         } else {
             stopAll(saveProgress = true)
         }
@@ -205,6 +211,14 @@ class WorkoutService : Service() {
             while (isActive) {
                 val current = _lymphaticState.value ?: break
                 if (current.isPaused) { delay(500); continue }
+
+                if (current.isPreparing) {
+                    audioCoach.announceExercise("Sıradaki hareket: ${current.movementName}")
+                    delay(2500) 
+                    audioCoach.announceExercise(current.movementDescription)
+                    _lymphaticState.value = _lymphaticState.value!!.copy(isPreparing = false)
+                    continue
+                }
                 
                 if (current.remainingSeconds <= 0) {
                     val nextIndex = current.currentMovementIndex + 1
@@ -214,10 +228,10 @@ class WorkoutService : Service() {
                             currentMovementIndex = nextIndex,
                             remainingSeconds = 60,
                             movementName = nextMovement.first,
-                            movementDescription = nextMovement.second
+                            movementDescription = nextMovement.second,
+                            isPreparing = true
                         )
-                        audioCoach.announceExercise("Sıradaki hareket: ${nextMovement.first}")
-                        delay(500)
+                        continue
                     } else {
                         break
                     }
@@ -225,13 +239,12 @@ class WorkoutService : Service() {
 
                 val newTime = _lymphaticState.value!!.remainingSeconds - 1
                 _lymphaticState.value = _lymphaticState.value!!.copy(remainingSeconds = newTime)
-                
                 updateNotification("Lenfatik: ${_lymphaticState.value!!.movementName}", "$newTime saniye kaldı", true)
                 
-                if (newTime == 3) {
-                    serviceScope.launch { audioCoach.playCountdown() }
-                }
+                if (newTime == 30) audioCoach.announceExercise("Son 30 saniye")
+                if (newTime == 15) audioCoach.announceExercise("Son 15 saniye")
                 
+                if (newTime == 3) serviceScope.launch { audioCoach.playCountdown() }
                 delay(1000)
             }
             if (_lymphaticState.value != null && _lymphaticState.value!!.currentMovementIndex >= lymphaticMovements.size - 1) {
@@ -251,6 +264,7 @@ class WorkoutService : Service() {
             timestamp = System.currentTimeMillis()
         )
         pushupRepo.insertRecord(record)
+        gamificationManager.checkAndUnlockAchievements()
     }
 
     private fun pauseActive() {
@@ -276,7 +290,7 @@ class WorkoutService : Service() {
             val walkedMinutes = ((33 * 60) - currentWalking.remainingSeconds) / 60.0
             serviceScope.launch { saveRecord("walking", walkedMinutes) }
         }
-
+        
         val currentLymphatic = _lymphaticState.value
         if (saveProgress && currentLymphatic != null) {
             val completedMinutes = (currentLymphatic.currentMovementIndex + 1).toDouble()
@@ -287,6 +301,11 @@ class WorkoutService : Service() {
         _walkingState.value = null
         _lymphaticState.value = null
         timerJob?.cancel()
+        
+        // Bildirimi kesin olarak temizle
+        val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+        nm.cancel(notificationId)
+        
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
@@ -352,6 +371,8 @@ class WorkoutService : Service() {
     override fun onDestroy() {
         timerJob?.cancel()
         serviceScope.cancel()
+        val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+        nm.cancel(notificationId)
         stopForeground(STOP_FOREGROUND_REMOVE)
         if (wakeLock?.isHeld == true) wakeLock?.release()
         super.onDestroy()

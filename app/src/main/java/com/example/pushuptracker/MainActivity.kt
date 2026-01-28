@@ -61,6 +61,8 @@ class MainActivity : ComponentActivity() {
         setContent {
             PushupTrackerTheme {
                 val context = LocalContext.current
+                
+                // İzin Durumları
                 var hasNotificationPermission by remember {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                         mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED)
@@ -68,15 +70,29 @@ class MainActivity : ComponentActivity() {
                         mutableStateOf(true)
                     }
                 }
+                
+                var hasAudioPermission by remember {
+                    mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
+                }
 
-                val permissionLauncher = rememberLauncherForActivityResult(
+                // İzin Başlatıcıları
+                val audioPermissionLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.RequestPermission(),
+                    onResult = { hasAudioPermission = it }
+                )
+
+                val notificationPermissionLauncher = rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.RequestPermission(),
                     onResult = { hasNotificationPermission = it }
                 )
 
+                // İzin İstek Akışı
                 LaunchedEffect(Unit) {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !hasNotificationPermission) {
-                        permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    }
+                    if (!hasAudioPermission) {
+                        audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                     }
                 }
 

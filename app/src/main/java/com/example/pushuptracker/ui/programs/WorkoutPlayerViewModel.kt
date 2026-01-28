@@ -1,13 +1,18 @@
 package com.example.pushuptracker.ui.programs
 
 import android.app.Application
+import android.content.Context
 import android.content.Intent
+import android.media.AudioManager
+import android.os.SystemClock
 import android.util.Log
+import android.view.KeyEvent
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.pushuptracker.BuildConfig
 import com.example.pushuptracker.SettingsManager
 import com.example.pushuptracker.audio.AudioCoach
+import com.example.pushuptracker.audio.VoiceCommandManager
 import com.example.pushuptracker.audio.WorkoutService
 import com.example.pushuptracker.data.repo.PushupRepo
 import com.example.pushuptracker.di.WorkoutHolder
@@ -47,7 +52,7 @@ sealed class WorkoutState {
     ) : WorkoutState()
     data class Resting(val nextExercise: Exercise, val nextSet: Int, val remainingTime: Int, val initialDuration: Int) : WorkoutState()
     data class Finished(
-        val totalTimeMinutes: Int, 
+        val totalTimeMinutes: Int,
         val totalVolume: Double,
         val dominantDifficulty: String
     ) : WorkoutState()
@@ -60,12 +65,15 @@ class WorkoutPlayerViewModel @Inject constructor(
     private val settingsManager: SettingsManager,
     private val audioCoach: AudioCoach,
     private val pushupRepo: PushupRepo,
-    private val gamificationManager: GamificationManager
+    private val gamificationManager: GamificationManager,
+    private val voiceCommandManager: VoiceCommandManager
 ) : AndroidViewModel(application) {
+
+    private val audioManager = application.getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
     private val _workoutState = MutableStateFlow<WorkoutState>(WorkoutState.Loading)
     val workoutState = _workoutState.asStateFlow()
-    
+
     private val _isSwapping = MutableStateFlow(false)
     val isSwapping = _isSwapping.asStateFlow()
 
@@ -100,6 +108,53 @@ class WorkoutPlayerViewModel @Inject constructor(
 
     init {
         loadStateAndStart()
+        // startVoiceCommandMonitoring() // Geçici olarak devre dışı bırakıldı
+    }
+
+    private fun startVoiceCommandMonitoring() {
+        viewModelScope.launch {
+            voiceCommandManager.startListening()
+            voiceCommandManager.commandFlow.collect { command ->
+                when {
+                    command == "easy" || command == "medium" || command == "hard" -> {
+                        val state = _workoutState.value
+                        if (state is WorkoutState.InProgress) {
+                            onSetFinished(command, "Sesli Komut", null)
+                        }
+                    }
+                    command == "finish" -> {
+                        val state = _workoutState.value
+                        if (state is WorkoutState.InProgress) {
+                            onSetFinished("medium", "Sesli Komut (Tamam)", null)
+                        }
+                    }
+                    command == "skip" -> {
+                        val state = _workoutState.value
+                        if (state is WorkoutState.Resting) {
+                            skipRest()
+                        }
+                    }
+                    // MEDIA COMMANDS
+                    command == "media_pause" -> sendMediaKey(KeyEvent.KEYCODE_MEDIA_PAUSE)
+                    command == "media_play" -> sendMediaKey(KeyEvent.KEYCODE_MEDIA_PLAY)
+                    command == "media_next" -> sendMediaKey(KeyEvent.KEYCODE_MEDIA_NEXT)
+                    command == "media_prev" -> sendMediaKey(KeyEvent.KEYCODE_MEDIA_PREVIOUS)
+                    command.startsWith("media_forward_") -> {
+                        sendMediaKey(KeyEvent.KEYCODE_MEDIA_FAST_FORWARD)
+                    }
+                    command.startsWith("media_backward_") -> {
+                        sendMediaKey(KeyEvent.KEYCODE_MEDIA_REWIND)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun sendMediaKey(keyCode: Int) {
+        val eventTime = SystemClock.uptimeMillis()
+        audioManager.dispatchMediaKeyEvent(KeyEvent(eventTime, eventTime, KeyEvent.ACTION_DOWN, keyCode, 0))
+        audioManager.dispatchMediaKeyEvent(KeyEvent(eventTime, eventTime, KeyEvent.ACTION_UP, keyCode, 0))
+        Log.d("WorkoutPlayerVM", "Media Key Sent: $keyCode")
     }
 
     private fun loadStateAndStart() = viewModelScope.launch {
@@ -121,9 +176,9 @@ class WorkoutPlayerViewModel @Inject constructor(
         calculateTotal()
     }
 
-    fun addPlate(plateWeight: Double) {
+    fun addPlate(plateWeight: Double, count: Int = 1) {
         val current = _selectedPlates.value.toMutableList()
-        current.add(plateWeight)
+        repeat(count) { current.add(plateWeight) }
         _selectedPlates.value = current
         calculateTotal()
     }
@@ -147,13 +202,9 @@ class WorkoutPlayerViewModel @Inject constructor(
 
     private fun calculateTotal(currentCategory: ExerciseCategory? = null) {
         val category = currentCategory ?: (workoutState.value as? WorkoutState.InProgress)?.category
-        if (category == ExerciseCategory.BODYWEIGHT) {
-            _totalCalculatedWeight.value = _selectedPlates.value.sum()
-        } else {
-            val multiplier = 2
-            val bar = _selectedBarWeight.value
-            _totalCalculatedWeight.value = bar + (_selectedPlates.value.sum() * multiplier)
-        }
+        val bar = _selectedBarWeight.value
+        val platesSum = _selectedPlates.value.sum()
+        _totalCalculatedWeight.value = bar + platesSum
     }
 
     private fun getCategory(exerciseName: String): ExerciseCategory {
@@ -170,18 +221,18 @@ class WorkoutPlayerViewModel @Inject constructor(
         timerJob?.cancel()
         exerciseTimerJob?.cancel()
         stateUpdateJob?.cancel()
-        
+
         val workout = workoutHolder.workout ?: return@launch
         val currentExercise = workout.exercises[workoutHolder.currentExerciseIndex]
         val category = getCategory(currentExercise.name)
-        
+
         val calculatedReps: Double = try {
             when {
                 actualReps != null && actualReps > 0 -> actualReps.toDouble()
-                currentExercise.reps.contains("MAX", ignoreCase = true) || 
-                currentExercise.reps.contains("Dakika", ignoreCase = true) || 
-                currentExercise.reps.contains("Saniye", ignoreCase = true) ||
-                currentExercise.reps.contains("sn", ignoreCase = true) -> 20.0
+                currentExercise.reps.contains("MAX", ignoreCase = true) ||
+                        currentExercise.reps.contains("Dakika", ignoreCase = true) ||
+                        currentExercise.reps.contains("Saniye", ignoreCase = true) ||
+                        currentExercise.reps.contains("sn", ignoreCase = true) -> 20.0
                 else -> {
                     val numbers = currentExercise.reps.split('-').mapNotNull { part ->
                         part.filter { it.isDigit() || it == '.' }.toDoubleOrNull()
@@ -211,7 +262,7 @@ class WorkoutPlayerViewModel @Inject constructor(
             machineMode = if (category == ExerciseCategory.MACHINE) _machineMode.value else null,
             machineLevel = if (category == ExerciseCategory.MACHINE) _machineLevel.value else null
         )
-        
+
         try {
             pushupRepo.insertRecord(record)
         } catch (e: Exception) {
@@ -223,13 +274,14 @@ class WorkoutPlayerViewModel @Inject constructor(
 
         if (workoutHolder.currentSetIndex < currentExercise.sets) {
             workoutHolder.currentSetIndex++
-            if (isWarmup(currentExercise)) onRestFinished() else startRest(currentExercise.restTimeSeconds, currentExercise, workoutHolder.currentSetIndex)
+            val nextSetIndex = workoutHolder.currentSetIndex
+            startRest(currentExercise.restTimeSeconds, currentExercise, nextSetIndex)
         } else {
             workoutHolder.currentExerciseIndex++
             if (workoutHolder.currentExerciseIndex < workout.exercises.size) {
                 workoutHolder.currentSetIndex = 1
                 val nextExercise = workout.exercises[workoutHolder.currentExerciseIndex]
-                if (isWarmup(currentExercise)) onRestFinished() else startRest(currentExercise.restTimeSeconds, nextExercise, 1)
+                startRest(currentExercise.restTimeSeconds, nextExercise, 1)
             } else {
                 finishWorkout(false)
             }
@@ -333,7 +385,10 @@ class WorkoutPlayerViewModel @Inject constructor(
     }
 
     private fun finishWorkout(isPlanFinished: Boolean) {
-        stopService()
+        voiceCommandManager.stopListening()
+        val stopIntent = Intent(getApplication(), WorkoutService::class.java).apply { action = "STOP" }
+        getApplication<Application>().startService(stopIntent)
+
         val totalTimeMinutes = ((System.currentTimeMillis() - startTimeMillis) / 60000).toInt()
         _workoutState.value = WorkoutState.Finished(totalTimeMinutes, sessionVolume, getDominantDifficulty())
         viewModelScope.launch {
@@ -351,14 +406,15 @@ class WorkoutPlayerViewModel @Inject constructor(
 
     private fun startRest(duration: Int, nextExercise: Exercise, nextSet: Int) {
         timerJob?.cancel(); exerciseTimerJob?.cancel()
+        audioCoach.announceExercise("Dinlen, $duration saniye. Sıradaki: ${nextExercise.name}, $nextSet. set.")
+
         startService("Dinlenme Başladı", "$duration saniye kaldı")
         timerJob = viewModelScope.launch {
             var remainingTime = duration
-            var countdownStarted = false
             while (remainingTime > 0) {
                 _workoutState.value = WorkoutState.Resting(nextExercise, nextSet, remainingTime, duration)
                 updateNotification("Dinlenme: $remainingTime sn", "Sıradaki: ${nextExercise.name}")
-                if (remainingTime <= 3 && !countdownStarted) { countdownStarted = true; launch { audioCoach.playCountdown() } }
+                if (remainingTime == 3) { launch { audioCoach.playCountdown() } }
                 delay(1000); remainingTime--
             }
             onRestFinished()
@@ -409,7 +465,7 @@ class WorkoutPlayerViewModel @Inject constructor(
             val weightPart = if (category == ExerciseCategory.MACHINE) " [${it.machineMode} - Lvl ${it.machineLevel}]" else if ((it.weightUsed ?: 0.0) > 0) " @ ${it.weightUsed} kg" else ""
             "Geçen Sefer: ${it.value.toInt()} Tekrar$weightPart"
         }
-        
+
         val coachSuggestion = lastRecord?.let {
             when (it.difficulty) {
                 "easy" -> "Geçen sefer kolaydı. Seviyeyi biraz artırabilirsin! 🚀"
@@ -419,13 +475,25 @@ class WorkoutPlayerViewModel @Inject constructor(
             }
         } ?: "İlk kez yapıyorsun, başarılar!"
 
+        val repsAnons = if (exercise.reps.contains("MAX", true)) "Maksimum tekrar" else "${exercise.reps} tekrar"
+
+        val weightAnons = if (setIndex == 1) {
+            lastRecord?.let {
+                if (category == ExerciseCategory.MACHINE) "Geçen sefer ${it.machineMode} modunda seviye ${it.machineLevel} yapmıştın."
+                else if ((it.weightUsed ?: 0.0) > 0) "Geçen sefer ${it.weightUsed} kilogram ile yapmıştın."
+                else null
+            } ?: ""
+        } else ""
+
+        audioCoach.announceExercise("${exercise.name}. $setIndex. set. Hedef $repsAnons. $weightAnons")
+
         val initialTime = parseExerciseTime(exercise.reps)
-        
+
         _workoutState.value = WorkoutState.InProgress(exercise, category, setIndex, workoutHolder.workout!!.exercises.size, workoutHolder.currentExerciseIndex + 1, hint, coachSuggestion, initialTime, false, initialTime != null)
 
         if (initialTime != null) {
             updateNotification("Hareket: ${exercise.name}", "Hazırlanılıyor...")
-            stateUpdateJob = viewModelScope.launch { delay(2000); val cur = _workoutState.value; if (cur is WorkoutState.InProgress) { _workoutState.value = cur.copy(isPreparing = false); startExerciseTimer(initialTime) } }
+            stateUpdateJob = viewModelScope.launch { delay(2500); val cur = _workoutState.value; if (cur is WorkoutState.InProgress) { _workoutState.value = cur.copy(isPreparing = false); startExerciseTimer(initialTime) } }
         } else updateNotification("Hareket: ${exercise.name}", "$setIndex. Set yapılıyor")
     }
 
@@ -433,14 +501,13 @@ class WorkoutPlayerViewModel @Inject constructor(
         exerciseTimerJob?.cancel()
         exerciseTimerJob = viewModelScope.launch {
             var time = seconds
-            var countdownStarted = false
             while (time > 0) {
                 val cur = _workoutState.value
                 if (cur is WorkoutState.InProgress) {
                     if (cur.isTimerPaused) break
                     _workoutState.value = cur.copy(remainingExerciseTime = time)
                     updateNotification("Hareket: ${cur.exercise.name}", "$time sn kaldı")
-                    if (time <= 3 && !countdownStarted) { countdownStarted = true; launch { audioCoach.playCountdown() } }
+                    if (time == 3) { launch { audioCoach.playCountdown() } }
                 }
                 delay(1000); time--
             }
@@ -466,6 +533,7 @@ class WorkoutPlayerViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
+        voiceCommandManager.stopListening()
         stopService()
         audioCoach.shutdown()
         timerJob?.cancel()

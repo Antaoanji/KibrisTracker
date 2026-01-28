@@ -9,6 +9,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -35,6 +36,7 @@ import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -61,7 +63,7 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WorkoutPlayerScreen(
-    navController: NavController, 
+    navController: NavController,
     viewModel: WorkoutPlayerViewModel = hiltViewModel()
 ) {
     val state by viewModel.workoutState.collectAsStateWithLifecycle()
@@ -78,7 +80,7 @@ fun WorkoutPlayerScreen(
     var selectedExerciseForInfo by remember { mutableStateOf<Exercise?>(null) }
 
     var activeBadge by remember { mutableStateOf<Badge?>(null) }
-    
+
     LaunchedEffect(Unit) {
         viewModel.newBadgeUnlocked.collect { badge ->
             activeBadge = badge
@@ -158,7 +160,7 @@ fun WorkoutPlayerScreen(
                         machineMode = machineMode,
                         machineLevel = machineLevel,
                         onBarSelect = { viewModel.selectBar(it) },
-                        onPlateAdd = { viewModel.addPlate(it) },
+                        onPlateAdd = { w, c -> viewModel.addPlate(w, c) },
                         onPlateRemove = { viewModel.removePlateAt(it) },
                         onMachineModeSelect = { viewModel.setMachineMode(it) },
                         onMachineLevelSelect = { viewModel.setMachineLevel(it) },
@@ -222,7 +224,7 @@ fun ExerciseScreen(
     machineMode: String,
     machineLevel: Int,
     onBarSelect: (Double) -> Unit,
-    onPlateAdd: (Double) -> Unit,
+    onPlateAdd: (Double, Int) -> Unit,
     onPlateRemove: (Int) -> Unit,
     onMachineModeSelect: (String) -> Unit,
     onMachineLevelSelect: (Int) -> Unit,
@@ -256,7 +258,7 @@ fun ExerciseScreen(
                 .padding(horizontal = 16.dp)
         ) {
             Spacer(Modifier.height(24.dp))
-            
+
             // --- SAYAÇ / SET BİLGİSİ ---
             Box(contentAlignment = Alignment.Center, modifier = Modifier.size(170.dp)) {
                 Canvas(modifier = Modifier.fillMaxSize()) {
@@ -279,7 +281,7 @@ fun ExerciseScreen(
             }
 
             Spacer(Modifier.height(12.dp))
-            
+
             if (historyHint != null) Text(text = historyHint, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.6f))
             if (coachSuggestion != null) Text(text = "💡 $coachSuggestion", style = MaterialTheme.typography.bodySmall, color = Color(0xFF00F5D4), textAlign = TextAlign.Center)
 
@@ -303,11 +305,11 @@ fun ExerciseScreen(
                         Text(if(category == ExerciseCategory.BODYWEIGHT) "Ek Ağırlık Ekle:" else "Plaka Ekle (Sağ+Sol):", style = MaterialTheme.typography.labelMedium, color = Color.Gray)
                         Spacer(Modifier.height(6.dp))
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            PlateButton(weight = 10.0, color = Color(0xFFE53935)) { onPlateAdd(10.0) }
-                            PlateButton(weight = 7.5, color = Color(0xFF1E88E5)) { onPlateAdd(7.5) }
-                            PlateButton(weight = 2.5, color = Color(0xFFFFB300)) { onPlateAdd(2.5) }
-                            PlateButton(weight = 2.0, color = Color(0xFF43A047)) { onPlateAdd(2.0) }
-                            PlateButton(weight = 1.5, color = Color(0xFFBDBDBD)) { onPlateAdd(1.5) }
+                            PlateButton(weight = 10.0, color = Color(0xFFE53935)) { count -> onPlateAdd(10.0, count) }
+                            PlateButton(weight = 7.5, color = Color(0xFF1E88E5)) { count -> onPlateAdd(7.5, count) }
+                            PlateButton(weight = 2.5, color = Color(0xFFFFB300)) { count -> onPlateAdd(2.5, count) }
+                            PlateButton(weight = 2.0, color = Color(0xFF43A047)) { count -> onPlateAdd(2.0, count) }
+                            PlateButton(weight = 1.5, color = Color(0xFFBDBDBD)) { count -> onPlateAdd(1.5, count) }
                         }
 
                         Spacer(Modifier.height(8.dp))
@@ -375,11 +377,11 @@ fun ExerciseScreen(
             Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (exercise.reps.contains("MAX", ignoreCase = true)) {
                     OutlinedTextField(
-                        value = repsInput, 
-                        onValueChange = { repsInput = it }, 
-                        label = { Text("Yapılan Tekrar") }, 
-                        modifier = Modifier.fillMaxWidth(), 
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = if(showNoteField) ImeAction.Next else ImeAction.Done), 
+                        value = repsInput,
+                        onValueChange = { repsInput = it },
+                        label = { Text("Yapılan Tekrar") },
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = if(showNoteField) ImeAction.Next else ImeAction.Done),
                         colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White),
                         singleLine = true,
                         shape = RoundedCornerShape(12.dp)
@@ -387,10 +389,10 @@ fun ExerciseScreen(
                 }
                 if (showNoteField) {
                     OutlinedTextField(
-                        value = noteInput, 
-                        onValueChange = { noteInput = it }, 
-                        label = { Text("Not Ekle") }, 
-                        modifier = Modifier.fillMaxWidth(), 
+                        value = noteInput,
+                        onValueChange = { noteInput = it },
+                        label = { Text("Not Ekle") },
+                        modifier = Modifier.fillMaxWidth(),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                         colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White),
                         singleLine = true,
@@ -486,8 +488,16 @@ fun BarChip(label: String, isSelected: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-fun PlateButton(weight: Double, color: Color, onClick: () -> Unit) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable(onClick = onClick)) {
+fun PlateButton(weight: Double, color: Color, onClick: (Int) -> Unit) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.pointerInput(Unit) {
+            detectTapGestures(
+                onTap = { onClick(1) },
+                onLongPress = { onClick(2) }
+            )
+        }
+    ) {
         Box(modifier = Modifier.size(40.dp).clip(CircleShape).background(color.copy(alpha = 0.2f)).border(2.dp, color, CircleShape), contentAlignment = Alignment.Center) {
             Text("${if(weight == 7.5 || weight == 2.5 || weight == 1.5) weight else weight.toInt()}", color = color, fontWeight = FontWeight.ExtraBold, fontSize = 12.sp)
         }
@@ -497,8 +507,8 @@ fun PlateButton(weight: Double, color: Color, onClick: () -> Unit) {
 @Composable
 fun DifficultyButton(label: String, color: Color, modifier: Modifier, onClick: () -> Unit) {
     Button(
-        onClick = onClick, 
-        colors = ButtonDefaults.buttonColors(containerColor = color), 
+        onClick = onClick,
+        colors = ButtonDefaults.buttonColors(containerColor = color),
         modifier = modifier.height(58.dp),
         shape = RoundedCornerShape(16.dp)
     ) {
