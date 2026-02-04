@@ -87,9 +87,10 @@ fun ProgramsScreen(
 
     if (showResetMenu) {
         ResetProgramsDialog(
-            onDismiss = { },
+            onDismiss = { showResetMenu = false },
             onConfirm = { selectedTypes ->
                 viewModel.resetPrograms(selectedTypes)
+                showResetMenu = false
             }
         )
     }
@@ -149,7 +150,7 @@ fun ProgramsScreen(
                         color = MaterialTheme.colorScheme.primary
                     )
                     
-                    IconButton(onClick = { }) {
+                    IconButton(onClick = { showResetMenu = true }) {
                         Icon(
                             Icons.Default.SettingsBackupRestore, 
                             contentDescription = "Sıfırla",
@@ -183,7 +184,7 @@ fun ProgramsScreen(
 
         if (showInfoSheet && workoutDetails != null) {
             ModalBottomSheet(
-                onDismissRequest = { },
+                onDismissRequest = { showInfoSheet = false },
                 sheetState = sheetState,
                 containerColor = MaterialTheme.colorScheme.surface,
                 dragHandle = { BottomSheetDefaults.DragHandle() }
@@ -194,7 +195,7 @@ fun ProgramsScreen(
                     navController = navController,
                     viewModel = viewModel,
                     dayIndex = selectedDayIndex,
-                    onCloseSheet = { }
+                    onCloseSheet = { showInfoSheet = false }
                 )
             }
         }

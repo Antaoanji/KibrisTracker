@@ -40,7 +40,8 @@ class WorkoutService : Service() {
     private val channelId = "workout_channel"
     
     private var timerJob: Job? = null
-    private val serviceScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+    // DÜZELTME: Daha yüksek öncelikli bir Dispatcher kullanarak sistem kısıtlamalarını minimize ediyoruz.
+    private val serviceScope = CoroutineScope(Dispatchers.Main.immediate + SupervisorJob())
     private var wakeLock: PowerManager.WakeLock? = null
 
     private val _timerState = MutableStateFlow<TimerState?>(null)
@@ -82,6 +83,7 @@ class WorkoutService : Service() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+        // CPU'nun asla uykuya dalmamasını sağlıyoruz.
         acquireWakeLock()
     }
 
@@ -106,13 +108,17 @@ class WorkoutService : Service() {
             }
         }
         
-        return START_NOT_STICKY
+        return START_STICKY // DÜZELTME: Sistemin servisi öldürmesi durumunda otomatik geri başlatılmasını sağlar.
     }
 
     private fun acquireWakeLock() {
-        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
-        wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "KibrisTracker:WorkoutWakeLock")
-        wakeLock?.acquire()
+        if (wakeLock == null) {
+            val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+            wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "KibrisTracker:WorkoutWakeLock")
+        }
+        if (wakeLock?.isHeld == false) {
+            wakeLock?.acquire()
+        }
     }
 
     private fun startGeneralTimer(seconds: Int, label: String) {
@@ -306,6 +312,7 @@ class WorkoutService : Service() {
         val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         nm.cancel(notificationId)
         
+        if (wakeLock?.isHeld == true) wakeLock?.release()
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
@@ -347,7 +354,6 @@ class WorkoutService : Service() {
 
         val priority = if (isRunning && isAppInForeground()) NotificationCompat.PRIORITY_LOW else NotificationCompat.PRIORITY_MAX
 
-        // İkon seçimi: Dinlenmede 'hourglass_empty', antrenmanda 'fitness_center'
         val iconRes = if (isResting) android.R.drawable.ic_menu_recent_history else android.R.drawable.ic_dialog_info
 
         return NotificationCompat.Builder(this, channelId)

@@ -124,22 +124,41 @@ class StatsViewModel @Inject constructor(
         viewModelScope.launch {
             _isRefreshing.value = true
             try {
+                // 1. Egzersiz seanslarını her zaman güncel tut (Küçük veri)
                 _healthSessions.value = healthConnectManager.readExerciseSessions()
-                val caloriesMap = healthConnectManager.readDailyCalories(
-                    start = Instant.now().minusSeconds(30 * 24 * 60 * 60),
-                    end = Instant.now()
-                )
 
-                caloriesMap.forEach { (date, calories) ->
-                    if (calories > 0) {
-                        pushupRepo.insertRecord(
-                            ActivityRecord(
-                                type = "calories",
-                                value = calories,
-                                date = date,
-                                timestamp = System.currentTimeMillis()
-                            )
+                // 2. Akıllı Senkronizasyon: En son hangi günün kalorisini kaydetmiştik?
+                val lastSavedDateStr = pushupRepo.getLastCalorieRecordDate()
+                val startTime = if (lastSavedDateStr != null) {
+                    try {
+                        // Kaydedilen son günün bir sonrasından başla
+                        LocalDate.parse(lastSavedDateStr).plusDays(1)
+                            .atStartOfDay(ZoneId.systemDefault()).toInstant()
+                    } catch (e: Exception) {
+                        Instant.now().minusSeconds(30 * 24 * 60 * 60)
+                    }
+                } else {
+                    Instant.now().minusSeconds(30 * 24 * 60 * 60)
+                }
+
+                val endTime = Instant.now()
+
+                // Sadece çekilmesi gereken bir aralık varsa Health Connect'e git
+                if (startTime.isBefore(endTime)) {
+                    val caloriesMap = healthConnectManager.readDailyCalories(start = startTime, end = endTime)
+
+                    val recordsToInsert = caloriesMap.map { (date, calories) ->
+                        ActivityRecord(
+                            type = "calories",
+                            value = calories,
+                            date = date,
+                            timestamp = System.currentTimeMillis()
                         )
+                    }.filter { it.value > 0 }
+
+                    if (recordsToInsert.isNotEmpty()) {
+                        pushupRepo.insertRecords(recordsToInsert)
+                        Log.d("StatsViewModel", "${recordsToInsert.size} yeni kalori kaydı senkronize edildi.")
                     }
                 }
             } catch (e: Exception) {

@@ -61,6 +61,36 @@ class SettingsManager @Inject constructor(private val dataStore: DataStore<Prefe
         }
     }
 
+    // --- Workout Persistence (NEW) ---
+    private val savedWorkoutTitleKey = stringPreferencesKey("saved_workout_title")
+    private val savedExerciseIndexKey = intPreferencesKey("saved_exercise_index")
+    private val savedSetIndexKey = intPreferencesKey("saved_set_index")
+
+    val savedWorkoutStateFlow: Flow<Triple<String, Int, Int>?> = dataStore.data.map {
+        val title = it[savedWorkoutTitleKey]
+        val exIdx = it[savedExerciseIndexKey]
+        val setIdx = it[savedSetIndexKey]
+        if (title != null && exIdx != null && setIdx != null) {
+            Triple(title, exIdx, setIdx)
+        } else null
+    }
+
+    suspend fun saveWorkoutProgress(title: String, exerciseIndex: Int, setIndex: Int) {
+        dataStore.edit {
+            it[savedWorkoutTitleKey] = title
+            it[savedExerciseIndexKey] = exerciseIndex
+            it[savedSetIndexKey] = setIndex
+        }
+    }
+
+    suspend fun clearSavedWorkoutProgress() {
+        dataStore.edit {
+            it.remove(savedWorkoutTitleKey)
+            it.remove(savedExerciseIndexKey)
+            it.remove(savedSetIndexKey)
+        }
+    }
+
     // --- Last Completed Workout Summary ---
     private val lastWorkoutSummaryTitleKey = stringPreferencesKey("last_workout_summary_title")
     private val lastWorkoutSummaryTimeKey = intPreferencesKey("last_workout_summary_time")

@@ -38,6 +38,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -357,6 +358,8 @@ fun ExerciseScreen(
     val finalProgress = if (exercise.sets > 0) set.toFloat() / exercise.sets.toFloat() else 0f
     val animatedProgress by animateFloatAsState(targetValue = if (buttonClicked) finalProgress else initialProgress, animationSpec = tween(durationMillis = 750), label = "")
 
+    val isWarmup = exercise.name.contains("Isınma", ignoreCase = true) || exercise.name.contains("Hafif", ignoreCase = true)
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -371,10 +374,10 @@ fun ExerciseScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp)
         ) {
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(16.dp))
 
             // --- SAYAÇ / SET BİLGİSİ ---
-            Box(contentAlignment = Alignment.Center, modifier = Modifier.size(170.dp)) {
+            Box(contentAlignment = Alignment.Center, modifier = Modifier.size(160.dp)) {
                 ComposeCanvas(modifier = Modifier.fillMaxSize()) {
                     drawArc(color = Color.White.copy(alpha = 0.15f), startAngle = -90f, sweepAngle = 360f, useCenter = false, style = Stroke(width = 8.dp.toPx()))
                     drawArc(color = Color(0xFF00F5D4), startAngle = -90f, sweepAngle = animatedProgress * 360f, useCenter = false, style = Stroke(width = 8.dp.toPx(), cap = StrokeCap.Round))
@@ -393,10 +396,9 @@ fun ExerciseScreen(
                 }
             }
 
-            Spacer(Modifier.height(8.dp)) // Azaltılmış Boşluk (Eskisi 12.dp)
+            Spacer(Modifier.height(8.dp))
 
             if (coachSuggestion != null) {
-                // Seçilen zorluğa göre renk belirleme
                 val suggestionColor = when {
                     coachSuggestion.contains("kolay", true) -> Color(0xFF4CAF50)
                     coachSuggestion.contains("formun iyiydi", true) -> Color(0xFFFFC107)
@@ -406,7 +408,7 @@ fun ExerciseScreen(
                 Text(text = "💡 $coachSuggestion", style = MaterialTheme.typography.bodySmall, color = suggestionColor, textAlign = TextAlign.Center)
             }
 
-            Spacer(Modifier.height(12.dp)) // Azaltılmış Boşluk (Eskisi 24.dp)
+            Spacer(Modifier.height(12.dp))
 
             // --- AKILLI EKİPMAN UI ---
             Column(modifier = Modifier.fillMaxWidth().background(Color.Black.copy(alpha = 0.4f), RoundedCornerShape(16.dp)).padding(12.dp)) {
@@ -435,7 +437,7 @@ fun ExerciseScreen(
 
                         Spacer(Modifier.height(8.dp))
 
-                        Box(modifier = Modifier.fillMaxWidth().height(32.dp).background(Color.DarkGray.copy(alpha = 0.2f), RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
+                        Box(modifier = Modifier.fillMaxWidth().height(28.dp).background(Color.DarkGray.copy(alpha = 0.2f), RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
                             if (selectedPlates.isEmpty()) {
                                 Text("Ağırlık Yok", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
                             } else {
@@ -481,8 +483,8 @@ fun ExerciseScreen(
                     }
                 }
 
-                Spacer(Modifier.height(8.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Spacer(Modifier.height(4.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
                     Column {
                         Text("Şu Anki Yük", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
                         val weightText = if (category == ExerciseCategory.MACHINE) "$machineMode - Lvl $machineLevel" else "${totalWeight} KG"
@@ -492,10 +494,10 @@ fun ExerciseScreen(
                 }
             }
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(12.dp))
 
             // --- GİRİŞ ALANLARI (Yapılan / Not) ---
-            Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (exercise.reps.contains("MAX", ignoreCase = true)) {
                     OutlinedTextField(
                         value = repsInput,
@@ -521,7 +523,7 @@ fun ExerciseScreen(
                     )
                 }
             }
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(16.dp))
         }
 
         // Alt Alan (Sabit Butonlar)
@@ -531,13 +533,32 @@ fun ExerciseScreen(
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                DifficultyButton("Kolay", Color(0xFF4CAF50), Modifier.weight(1f)) { if(!buttonClicked) { buttonClicked = true; scope.launch { delay(500L); onSetFinished("easy", noteInput, repsInput.toIntOrNull()) } } }
-                DifficultyButton("Orta", Color(0xFFFFC107), Modifier.weight(1f)) { if(!buttonClicked) { buttonClicked = true; scope.launch { delay(500L); onSetFinished("medium", noteInput, repsInput.toIntOrNull()) } } }
-                DifficultyButton("Zor", Color(0xFFF44336), Modifier.weight(1f)) { if(!buttonClicked) { buttonClicked = true; scope.launch { delay(500L); onSetFinished("hard", noteInput, repsInput.toIntOrNull()) } } }
+            if (isWarmup) {
+                Button(
+                    onClick = {
+                        if (!buttonClicked) {
+                            buttonClicked = true
+                            scope.launch {
+                                delay(500L)
+                                onSetFinished("medium", noteInput, repsInput.toIntOrNull())
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00F5D4))
+                ) {
+                    Text("TAMAMLA", fontWeight = FontWeight.ExtraBold, color = Color.Black, fontSize = 18.sp)
+                }
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    DifficultyButton("Kolay", Color(0xFF4CAF50), Modifier.weight(1f)) { if(!buttonClicked) { buttonClicked = true; scope.launch { delay(500L); onSetFinished("easy", noteInput, repsInput.toIntOrNull()) } } }
+                    DifficultyButton("Orta", Color(0xFFFFC107), Modifier.weight(1f)) { if(!buttonClicked) { buttonClicked = true; scope.launch { delay(500L); onSetFinished("medium", noteInput, repsInput.toIntOrNull()) } } }
+                    DifficultyButton("Zor", Color(0xFFF44336), Modifier.weight(1f)) { if(!buttonClicked) { buttonClicked = true; scope.launch { delay(500L); onSetFinished("hard", noteInput, repsInput.toIntOrNull()) } } }
+                }
             }
         }
     }
@@ -545,21 +566,84 @@ fun ExerciseScreen(
 
 @Composable
 fun RestScreen(restTime: Int, initialDuration: Int, nextExerciseName: String, onSkip: () -> Unit, onAddTime: () -> Unit) {
-    val progress by animateFloatAsState(targetValue = if (initialDuration > 0) restTime.toFloat() / initialDuration.toFloat() else 0f, label = "")
-    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center, modifier = Modifier.padding(16.dp)) {
-        Text("Dinlen", style = MaterialTheme.typography.displayMedium.copy(color = Color.White, shadow = Shadow(Color.Black, blurRadius = 8f)))
-        Spacer(Modifier.height(16.dp))
-        Box(contentAlignment = Alignment.Center, modifier = Modifier.size(280.dp)) {
-            CircularProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxSize(), strokeWidth = 20.dp, color = MaterialTheme.colorScheme.primary, trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
-            Text("$restTime", style = MaterialTheme.typography.displayLarge.copy(fontSize = 100.sp, color = Color.White, shadow = Shadow(Color.Black, blurRadius = 12f)))
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.fillMaxSize().padding(16.dp)
+    ) {
+        Spacer(Modifier.weight(1f))
+        
+        Text("Dinlen", style = MaterialTheme.typography.displayMedium.copy(color = Color.White, fontWeight = FontWeight.Bold))
+        Spacer(Modifier.height(24.dp))
+        
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.size(260.dp)) {
+            CircularProgressIndicator(
+                progress = { if (initialDuration > 0) restTime.toFloat() / initialDuration.toFloat() else 0f },
+                modifier = Modifier.fillMaxSize(), 
+                strokeWidth = 12.dp, 
+                color = Color(0xFF00F5D4), 
+                trackColor = Color.White.copy(alpha = 0.1f)
+            )
+            Text("$restTime", style = MaterialTheme.typography.displayLarge.copy(fontSize = 80.sp, color = Color.White, fontWeight = FontWeight.Black))
         }
-        Spacer(Modifier.height(16.dp))
-        Text(text = "Sıradaki: $nextExerciseName", style = MaterialTheme.typography.headlineSmall.copy(color = Color.White, shadow = Shadow(Color.Black, blurRadius = 8f)))
+        
         Spacer(Modifier.height(32.dp))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-            Button(onClick = onSkip, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)) { Text("Atla") }
-            Button(onClick = onAddTime, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)) { Text("+15 sn Ekle") }
+        
+        Text(text = "Sıradaki:", style = MaterialTheme.typography.labelLarge, color = Color.Gray)
+        Text(
+            text = nextExerciseName, 
+            style = MaterialTheme.typography.headlineSmall.copy(color = Color.White, fontWeight = FontWeight.Bold),
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 8.dp)
+        )
+        
+        Spacer(Modifier.weight(1f))
+        
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Atla Butonu (Özel Tasarım)
+            Surface(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(52.dp)
+                    .clickable { onSkip() },
+                shape = RoundedCornerShape(12.dp),
+                color = Color.DarkGray
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(
+                        text = "Atla", 
+                        color = Color.White,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            // +15 sn Ekle Butonu (Özel Tasarım)
+            Surface(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(52.dp)
+                    .clickable { onAddTime() },
+                shape = RoundedCornerShape(12.dp),
+                color = Color(0xFF00F5D4)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(
+                        text = "+15 sn Ekle", 
+                        color = Color.Black,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
         }
+        Spacer(Modifier.height(24.dp))
     }
 }
 
@@ -661,10 +745,10 @@ fun DifficultyButton(label: String, color: Color, modifier: Modifier, onClick: (
     Button(
         onClick = onClick,
         colors = ButtonDefaults.buttonColors(containerColor = color),
-        modifier = modifier.height(58.dp),
+        modifier = modifier.height(50.dp),
         shape = RoundedCornerShape(16.dp)
     ) {
-        Text(label, fontWeight = FontWeight.ExtraBold, color = Color.Black, fontSize = 18.sp)
+        Text(label, fontWeight = FontWeight.ExtraBold, color = Color.Black, fontSize = 16.sp)
     }
 }
 

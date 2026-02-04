@@ -15,6 +15,9 @@ class PushupRepo @Inject constructor(private val pushupDao: PushupDao) {
     private val today: String get() = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
 
     suspend fun insertRecord(record: ActivityRecord) = pushupDao.insertRecord(record)
+    
+    suspend fun insertRecords(records: List<ActivityRecord>) = pushupDao.insertRecords(records)
+
     suspend fun clear() = pushupDao.clear()
     suspend fun delete(date: String) = pushupDao.delete(date)
     suspend fun deleteRecordForDateAndType(type: String, date: String) =
@@ -52,4 +55,6 @@ class PushupRepo @Inject constructor(private val pushupDao: PushupDao) {
     fun getDistinctExerciseTypes(): Flow<List<String>> = pushupDao.getDistinctExerciseTypes()
 
     fun getAllPushupRecords(): Flow<List<ActivityRecord>> = pushupDao.getAllPushupRecords()
+
+    suspend fun getLastCalorieRecordDate(): String? = pushupDao.getLastCalorieRecordDate()
 }

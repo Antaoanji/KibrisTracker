@@ -98,16 +98,21 @@ class WorkoutPlayerViewModel @Inject constructor(
         loadStateAndStart()
     }
 
-    private fun sendMediaKey(keyCode: Int) {
-        val eventTime = SystemClock.uptimeMillis()
-        audioManager.dispatchMediaKeyEvent(KeyEvent(eventTime, eventTime, KeyEvent.ACTION_DOWN, keyCode, 0))
-        audioManager.dispatchMediaKeyEvent(KeyEvent(eventTime, eventTime, KeyEvent.ACTION_UP, keyCode, 0))
-        Log.d("WorkoutPlayerVM", "Media Key Sent: $keyCode")
-    }
-
     private fun loadStateAndStart() = viewModelScope.launch {
         sessionVolume = 0.0
         sessionDifficulties.clear()
+        
+        // Önce kaydedilmiş bir ilerleme var mı kontrol et (Persistence)
+        val savedState = settingsManager.savedWorkoutStateFlow.first()
+        val currentWorkout = workoutHolder.workout
+
+        if (savedState != null && currentWorkout != null && savedState.first == currentWorkout.title) {
+            // Eğer kaydedilen antrenman şu an açılan ile aynıysa, oradan devam et
+            workoutHolder.currentExerciseIndex = savedState.second
+            workoutHolder.currentSetIndex = savedState.third
+            Log.d("WorkoutPlayerVM", "Restoring progress: Ex ${savedState.second}, Set ${savedState.third}")
+        }
+
         val workout = workoutHolder.workout
         if (workout == null || workout.exercises.isEmpty() || workoutHolder.currentExerciseIndex >= workout.exercises.size) {
             finishWorkout(true)
@@ -117,6 +122,17 @@ class WorkoutPlayerViewModel @Inject constructor(
         startTimeMillis = System.currentTimeMillis()
         val exercise = workout.exercises[workoutHolder.currentExerciseIndex]
         updateStateWithHistory(exercise, workoutHolder.currentSetIndex)
+    }
+
+    private fun saveCurrentProgress() {
+        viewModelScope.launch {
+            val title = workoutHolder.workout?.title ?: return@launch
+            settingsManager.saveWorkoutProgress(
+                title = title,
+                exerciseIndex = workoutHolder.currentExerciseIndex,
+                setIndex = workoutHolder.currentSetIndex
+            )
+        }
     }
 
     fun selectBar(weight: Double) {
@@ -221,12 +237,13 @@ class WorkoutPlayerViewModel @Inject constructor(
 
         if (workoutHolder.currentSetIndex < currentExercise.sets) {
             workoutHolder.currentSetIndex++
-            val nextSetIndex = workoutHolder.currentSetIndex
-            startRest(currentExercise.restTimeSeconds, currentExercise, nextSetIndex)
+            saveCurrentProgress() // Set tamamlandı, kaydet
+            startRest(currentExercise.restTimeSeconds, currentExercise, workoutHolder.currentSetIndex)
         } else {
             workoutHolder.currentExerciseIndex++
             if (workoutHolder.currentExerciseIndex < workout.exercises.size) {
                 workoutHolder.currentSetIndex = 1
+                saveCurrentProgress() // Egzersiz değişti, kaydet
                 val nextExercise = workout.exercises[workoutHolder.currentExerciseIndex]
                 startRest(currentExercise.restTimeSeconds, nextExercise, 1)
             } else {
@@ -249,11 +266,6 @@ class WorkoutPlayerViewModel @Inject constructor(
         }
     }
 
-    private fun isWarmup(exercise: Exercise): Boolean {
-        val warmupKeywords = listOf("Isınma", "Çevirme", "Döndürme", "Jumping", "Kedi-Deve", "Scapular", "Duvarda", "Leg Swing", "Pull Apart", "Bodyweight Squat", "Melek", "Stretch", "Hang", "Statik")
-        return warmupKeywords.any { exercise.name.contains(it, ignoreCase = true) } || exercise.reps.contains("Saniye") || exercise.reps.contains("Dakika") || exercise.reps.contains("sn")
-    }
-
     private fun getDominantDifficulty(): String {
         val dominant = sessionDifficulties.groupingBy { it }.eachCount().maxByOrNull { it.value }?.key
         return when (dominant) {
@@ -268,6 +280,7 @@ class WorkoutPlayerViewModel @Inject constructor(
         val workout = workoutHolder.workout ?: return@launch
         if (workoutHolder.currentExerciseIndex < workout.exercises.size - 1) {
             workoutHolder.currentExerciseIndex++; workoutHolder.currentSetIndex = 1
+            saveCurrentProgress()
             updateStateWithHistory(workout.exercises[workoutHolder.currentExerciseIndex], 1)
         } else { finishWorkout(false) }
     }
@@ -277,6 +290,7 @@ class WorkoutPlayerViewModel @Inject constructor(
         val workout = workoutHolder.workout ?: return@launch
         if (workoutHolder.currentExerciseIndex > 0) {
             workoutHolder.currentExerciseIndex--; workoutHolder.currentSetIndex = 1
+            saveCurrentProgress()
             updateStateWithHistory(workout.exercises[workoutHolder.currentExerciseIndex], 1)
         }
     }
@@ -322,12 +336,12 @@ class WorkoutPlayerViewModel @Inject constructor(
         _workoutState.value = WorkoutState.Finished(totalTimeMinutes, sessionVolume, getDominantDifficulty(), workoutTitle)
         
         viewModelScope.launch {
+            // Antrenman bitti, ilerlemeyi temizle
+            settingsManager.clearSavedWorkoutProgress()
+
             val summary = WorkoutSummary(workoutTitle, totalTimeMinutes, 0, System.currentTimeMillis())
-            
-            // Save to DataStore
             settingsManager.saveLastWorkoutSummary(summary)
             
-            // Save to WorkoutRecord for Heatmap
             val todayDate = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
             workoutRecordDao.insertRecord(
                 WorkoutRecord(
@@ -338,11 +352,10 @@ class WorkoutPlayerViewModel @Inject constructor(
                 )
             )
             
-            // Tam antrenman ismini ActivityRecord olarak da kaydet
             pushupRepo.insertRecord(
                 ActivityRecord(
-                    type = workoutTitle, // Örn: MACHINE_WEIGHT_PUSH
-                    value = 1.0, // Tamamlandığını belirtmek için 1
+                    type = workoutTitle,
+                    value = 1.0,
                     date = todayDate,
                     timestamp = System.currentTimeMillis(),
                     note = "Workout Completed"
@@ -364,7 +377,6 @@ class WorkoutPlayerViewModel @Inject constructor(
         timerJob?.cancel(); exerciseTimerJob?.cancel()
         audioCoach.announceExercise("Dinlen, $duration saniye. Sıradaki: ${nextExercise.name}, $nextSet. set.")
 
-        // Bildirim başlığına (X/Y) ve set bilgisini ekle
         val workout = workoutHolder.workout
         val total = workout?.exercises?.size ?: 0
         val currentIdx = workoutHolder.currentExerciseIndex + 1
@@ -424,11 +436,6 @@ class WorkoutPlayerViewModel @Inject constructor(
             _machineMode.value = "Medium"
             _machineLevel.value = 5
             calculateTotal(category)
-        }
-
-        val hint = lastRecord?.let {
-            val weightPart = if (category == ExerciseCategory.MACHINE) " [${it.machineMode} - Lvl ${it.machineLevel}]" else if ((it.weightUsed ?: 0.0) > 0) " @ ${it.weightUsed} kg" else ""
-            "Geçen Sefer: ${it.value.toInt()} Tekrar$weightPart"
         }
 
         val coachSuggestion = lastRecord?.let {
@@ -499,18 +506,8 @@ class WorkoutPlayerViewModel @Inject constructor(
         getApplication<Application>().startForegroundService(intent)
     }
 
-    private fun startService(title: String, content: String) {
-        updateNotification(title, content)
-    }
-
-    private fun stopService() {
-        getApplication<Application>().stopService(Intent(getApplication(), WorkoutService::class.java))
-    }
-
     override fun onCleared() {
         super.onCleared()
-        // ViewModel silindiğinde servisi DURDURMA. Antrenman arka planda devam etmeli.
-        // stopService() ve audioCoach.shutdown() kaldırıldı.
         timerJob?.cancel()
         exerciseTimerJob?.cancel()
         stateUpdateJob?.cancel()

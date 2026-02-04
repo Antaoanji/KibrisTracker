@@ -13,6 +13,9 @@ interface PushupDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertRecord(record: ActivityRecord)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertRecords(records: List<ActivityRecord>)
+
     @Query("SELECT * FROM activity_records WHERE date = :date AND type = 'pushup'")
     fun getRecordForDate(date: String): Flow<ActivityRecord?>
 
@@ -33,6 +36,9 @@ interface PushupDao {
 
     @Query("SELECT * FROM activity_records WHERE type = 'pushup'")
     fun getAllPushupRecords(): Flow<List<ActivityRecord>>
+
+    @Query("SELECT MAX(date) FROM activity_records WHERE type = 'calories'")
+    suspend fun getLastCalorieRecordDate(): String?
 
     @Query("DELETE FROM activity_records WHERE date = :date AND type = 'pushup'")
     suspend fun delete(date: String)
