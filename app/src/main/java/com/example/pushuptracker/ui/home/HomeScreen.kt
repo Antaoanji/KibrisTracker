@@ -45,18 +45,50 @@ import com.example.pushuptracker.audio.WorkoutService
 import com.example.pushuptracker.model.Activities
 import com.example.pushuptracker.model.Streak
 import com.example.pushuptracker.model.TrackableActivity
+import com.example.pushuptracker.navigation.Screen
+import androidx.navigation.NavController
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.MutableStateFlow
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(viewModel: HomeViewModel = hiltViewModel()) {
+fun HomeScreen(
+    navController: NavController,
+    viewModel: HomeViewModel = hiltViewModel()
+) {
     val uiState by viewModel.homeScreenState.collectAsStateWithLifecycle()
     val updateInfo by viewModel.updateInfo.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(Unit) {
+        viewModel.eventFlow.collectLatest { event ->
+            when (event) {
+                is HomeViewModel.HomeEvent.TriggerHaptic -> {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                }
+                is HomeViewModel.HomeEvent.ShowUndoSnackbar -> {
+                    val result = snackbarHostState.showSnackbar(
+                        message = event.message,
+                        actionLabel = "GERİ AL",
+                        duration = SnackbarDuration.Short
+                    )
+                    if (result == SnackbarResult.ActionPerformed) {
+                        viewModel.undoLastPushup()
+                    }
+                }
+            }
+        }
+    }
 
     var workoutService by remember { mutableStateOf<WorkoutService?>(null) }
-    val walkingState = workoutService?.walkingState?.collectAsStateWithLifecycle()
-    val lymphaticState = workoutService?.lymphaticState?.collectAsStateWithLifecycle()
+    val walkingState by (workoutService?.walkingState ?: remember { MutableStateFlow<WorkoutService.WalkingState?>(null) }).collectAsStateWithLifecycle()
+    val lymphaticState by (workoutService?.lymphaticState ?: remember { MutableStateFlow<WorkoutService.LymphaticState?>(null) }).collectAsStateWithLifecycle()
 
     val connection = remember {
         object : ServiceConnection {
@@ -70,12 +102,32 @@ fun HomeScreen(viewModel: HomeViewModel = hiltViewModel()) {
         }
     }
 
-    LaunchedEffect(Unit) {
+    DisposableEffect(Unit) {
         val intent = Intent(context, WorkoutService::class.java)
         context.bindService(intent, connection, Context.BIND_AUTO_CREATE)
+        onDispose {
+            try {
+                context.unbindService(connection)
+            } catch (e: Exception) {
+                // Ignore
+            }
+        }
+    }
+
+    // Auto-navigate when workout is active and we are on Home screen
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
+
+    LaunchedEffect(walkingState, lymphaticState, currentRoute) {
+        if ((walkingState != null || lymphaticState != null) && (currentRoute == Screen.Home.route)) {
+            navController.navigate(Screen.ActiveWorkout.route) {
+                launchSingleTop = true
+            }
+        }
     }
 
     var showAddDialog by remember { mutableStateOf<TrackableActivity?>(null) }
+    var showCompletePushupDialog by remember { mutableStateOf(false) }
     var showAutoTracker by remember { mutableStateOf(false) }
     var showCelebration by remember { mutableStateOf(false) }
     var showWalkingMenu by remember { mutableStateOf(false) }
@@ -112,6 +164,7 @@ fun HomeScreen(viewModel: HomeViewModel = hiltViewModel()) {
                 }
             )
         },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize()){
@@ -126,21 +179,38 @@ fun HomeScreen(viewModel: HomeViewModel = hiltViewModel()) {
                         activity = activity, 
                         onAddClick = { 
                             when (activity.id) {
-                                "walking" -> showWalkingMenu = true
-                                "lymphatic" -> showLymphaticMenu = true
+                                "walking" -> {
+                                    if (walkingState != null) {
+                                        navController.navigate(Screen.ActiveWorkout.route)
+                                    } else {
+                                        showWalkingMenu = true
+                                    }
+                                }
+                                "lymphatic" -> {
+                                    if (lymphaticState != null) {
+                                        navController.navigate(Screen.ActiveWorkout.route)
+                                    } else {
+                                        showLymphaticMenu = true
+                                    }
+                                }
                                 else -> showAddDialog = activity
                             }
                         },
-                        onAutoTrackClick = { if(activity.id == "pushups") showAutoTracker = true }
+                        onAutoTrackClick = { if(activity.id == "pushups") showAutoTracker = true },
+                        onCompleteClick = { if(activity.id == "pushups") showCompletePushupDialog = true }
                     )
                 }
             }
 
             if (showWalkingMenu) {
                 WalkingActiveMenu(
-                    state = walkingState?.value,
+                    state = walkingState,
                     onDismiss = { showWalkingMenu = false },
-                    onStart = { viewModel.startWalkingWorkout() },
+                    onStart = { 
+                        viewModel.startWalkingWorkout()
+                        showWalkingMenu = false // Menüyü kapat
+                        navController.navigate(Screen.ActiveWorkout.route)
+                    },
                     onPause = { context.startService(Intent(context, WorkoutService::class.java).apply { action = "PAUSE" }) },
                     onResume = { context.startService(Intent(context, WorkoutService::class.java).apply { action = "RESUME" }) },
                     onStop = { context.startService(Intent(context, WorkoutService::class.java).apply { action = "STOP" }) },
@@ -150,9 +220,13 @@ fun HomeScreen(viewModel: HomeViewModel = hiltViewModel()) {
 
             if (showLymphaticMenu) {
                 LymphaticActiveMenu(
-                    state = lymphaticState?.value,
+                    state = lymphaticState,
                     onDismiss = { showLymphaticMenu = false },
-                    onStart = { viewModel.startLymphaticWorkout() },
+                    onStart = { 
+                        viewModel.startLymphaticWorkout()
+                        showLymphaticMenu = false // Menüyü kapat
+                        navController.navigate(Screen.ActiveWorkout.route)
+                    },
                     onPause = { context.startService(Intent(context, WorkoutService::class.java).apply { action = "PAUSE" }) },
                     onResume = { context.startService(Intent(context, WorkoutService::class.java).apply { action = "RESUME" }) },
                     onStop = { context.startService(Intent(context, WorkoutService::class.java).apply { action = "STOP" }) },
@@ -171,16 +245,31 @@ fun HomeScreen(viewModel: HomeViewModel = hiltViewModel()) {
 
             showAddDialog?.let {
                 AddRecordDialog(activity = it, onDismiss = { showAddDialog = null }, onSave = { v ->
-                    viewModel.addRecord(it.id, v) { reached -> if(reached) showCelebration = true }
+                    if (it.id == "pushups") {
+                        viewModel.addRemainingPushups(v)
+                    } else {
+                        viewModel.addRecord(it.id, v) { reached -> if(reached) showCelebration = true }
+                    }
                     showAddDialog = null
                 })
+            }
+
+            if (showCompletePushupDialog) {
+                AddRecordDialog(
+                    activity = Activities.PUSHUPS,
+                    titleOverride = "Şınav Tamamla",
+                    onDismiss = { showCompletePushupDialog = false },
+                    onSave = { v ->
+                        viewModel.completePushup(v.toInt())
+                        showCompletePushupDialog = false
+                    }
+                )
             }
 
             if (showAutoTracker) {
                 AutoPushupTrackerDialog(
                     onDismiss = { showAutoTracker = false },
-                    onFinish = { count ->
-                        viewModel.addRecord("pushups", count.toDouble()) { reached -> if(reached) showCelebration = true }
+                    onFinish = { _ ->
                         showAutoTracker = false
                     }
                 )
@@ -328,11 +417,12 @@ fun LymphaticActiveMenu(
 }
 
 @Composable
-fun ActivityCard(viewModel: HomeViewModel, activity: TrackableActivity, onAddClick: () -> Unit, onAutoTrackClick: () -> Unit) {
+fun ActivityCard(viewModel: HomeViewModel, activity: TrackableActivity, onAddClick: () -> Unit, onAutoTrackClick: () -> Unit, onCompleteClick: () -> Unit = {}) {
     val todayRecord by viewModel.getTodayRecord(activity.id).collectAsStateWithLifecycle(null)
     val yesterdayRecord by viewModel.getYesterdayRecord(activity.id).collectAsStateWithLifecycle(null)
     val total by viewModel.getTotal(activity.id).collectAsStateWithLifecycle(0.0)
     val dailyGoal by viewModel.getDailyGoal(activity.id).collectAsStateWithLifecycle(0)
+    val remainingPushups by viewModel.remainingPushups.collectAsStateWithLifecycle()
 
     val todayValue = todayRecord?.value ?: 0.0
     val progress = if (dailyGoal > 0) (todayValue / dailyGoal.toDouble()).toFloat() else 0f
@@ -343,7 +433,24 @@ fun ActivityCard(viewModel: HomeViewModel, activity: TrackableActivity, onAddCli
                 Image(painter = painterResource(id = activity.imageRes), contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop, alignment = activity.alignment)
                 Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.2f)))
                 Row(modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp)) {
-                    if (activity.id == "pushups") FloatingActionButton(onClick = onAutoTrackClick, modifier = Modifier.padding(end = 8.dp), shape = CircleShape, containerColor = MaterialTheme.colorScheme.secondary) { Icon(Icons.Default.TouchApp, null) }
+                    if (activity.id == "pushups") {
+                        FloatingActionButton(
+                            onClick = onCompleteClick,
+                            modifier = Modifier.padding(end = 8.dp),
+                            shape = CircleShape,
+                            containerColor = Color(0xFF4CAF50)
+                        ) {
+                            Icon(Icons.Default.Check, null, tint = Color.White)
+                        }
+                        FloatingActionButton(
+                            onClick = onAutoTrackClick,
+                            modifier = Modifier.padding(end = 8.dp),
+                            shape = CircleShape,
+                            containerColor = MaterialTheme.colorScheme.secondary
+                        ) {
+                            Icon(Icons.Default.TouchApp, null)
+                        }
+                    }
                     FloatingActionButton(onClick = onAddClick, shape = CircleShape, containerColor = when(activity.id) {
                         "walking" -> MaterialTheme.colorScheme.tertiary
                         "lymphatic" -> Color(0xFF9C27B0)
@@ -358,7 +465,11 @@ fun ActivityCard(viewModel: HomeViewModel, activity: TrackableActivity, onAddCli
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     InfoColumn(title = stringResource(R.string.today), value = todayValue.toInt().toString())
                     InfoColumn(title = stringResource(R.string.yesterday), value = (yesterdayRecord?.value ?: 0.0).toInt().toString())
-                    InfoColumn(title = stringResource(R.string.goal_label), value = dailyGoal.toString())
+                    if (activity.id == "pushups") {
+                        InfoColumn(title = "Kalan", value = remainingPushups.toInt().toString())
+                    } else {
+                        InfoColumn(title = stringResource(R.string.goal_label), value = dailyGoal.toString())
+                    }
                     InfoColumn(title = stringResource(R.string.total), value = total.toInt().toString())
                 }
             }
@@ -385,11 +496,16 @@ fun GradientProgressBar(progress: Float) {
 }
 
 @Composable
-fun AddRecordDialog(activity: TrackableActivity, onDismiss: () -> Unit, onSave: (Double) -> Unit) {
+fun AddRecordDialog(
+    activity: TrackableActivity, 
+    titleOverride: String? = null,
+    onDismiss: () -> Unit, 
+    onSave: (Double) -> Unit
+) {
     var input by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("${activity.name} Ekle") },
+        title = { Text(titleOverride ?: "${activity.name} Ekle") },
         text = { OutlinedTextField(value = input, onValueChange = { input = it }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)) },
         confirmButton = { Button(onClick = { input.toDoubleOrNull()?.let { onSave(it) } }) { Text("Kaydet") } }
     )

@@ -334,16 +334,37 @@ fun OverallStatsCard(
                     .background(ComposeColor.Black.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
                     .padding(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
+                horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                Icon(Icons.Default.Sync, contentDescription = null, tint = ComposeColor(0xFF00F5D4), modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = "Xiaomi Band Kalori: ${stats.totalCalories} kcal",
-                    color = ComposeColor.White,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp
-                )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.DateRange, contentDescription = null, tint = ComposeColor(0xFF00F5D4), modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(text = "Haftalık", color = ComposeColor.Gray, fontSize = 11.sp)
+                    }
+                    Text(
+                        text = "${stats.weeklyCalories} kcal",
+                        color = ComposeColor.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp
+                    )
+                }
+
+                Box(modifier = Modifier.width(1.dp).height(30.dp).background(ComposeColor.White.copy(alpha = 0.1f)))
+
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Sync, contentDescription = null, tint = ComposeColor(0xFF00F5D4), modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(text = "Tüm Zamanlar", color = ComposeColor.Gray, fontSize = 11.sp)
+                    }
+                    Text(
+                        text = "${stats.totalCalories} kcal",
+                        color = ComposeColor.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(16.dp))

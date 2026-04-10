@@ -31,6 +31,11 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.health.connect.client.PermissionController
+import androidx.health.connect.client.permission.HealthPermission
+import androidx.health.connect.client.records.ActiveCaloriesBurnedRecord
+import androidx.health.connect.client.records.ExerciseSessionRecord
+import androidx.health.connect.client.records.StepsRecord
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -53,6 +58,14 @@ class MainActivity : ComponentActivity() {
 
     private val programsViewModel: ProgramsViewModel by viewModels()
 
+    // Health Connect İzin Listesi
+    private val healthPermissions = setOf(
+        HealthPermission.getReadPermission(StepsRecord::class),
+        HealthPermission.getWritePermission(StepsRecord::class),
+        HealthPermission.getReadPermission(ExerciseSessionRecord::class),
+        HealthPermission.getReadPermission(ActiveCaloriesBurnedRecord::class)
+    )
+
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
@@ -70,15 +83,37 @@ class MainActivity : ComponentActivity() {
                         mutableStateOf(true)
                     }
                 }
+
+                var hasActivityRecognitionPermission by remember {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.ACTIVITY_RECOGNITION) == PackageManager.PERMISSION_GRANTED)
+                    } else {
+                        mutableStateOf(true)
+                    }
+                }
                 
                 var hasAudioPermission by remember {
                     mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
+                }
+
+                // Health Connect İzin Başlatıcısı
+                val requestHealthPermissions = rememberLauncherForActivityResult(
+                    PermissionController.createRequestPermissionResultContract()
+                ) { granted ->
+                    if (granted.containsAll(healthPermissions)) {
+                        // Tüm izinler alındı
+                    }
                 }
 
                 // İzin Başlatıcıları
                 val audioPermissionLauncher = rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.RequestPermission(),
                     onResult = { hasAudioPermission = it }
+                )
+
+                val activityRecognitionPermissionLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.RequestPermission(),
+                    onResult = { hasActivityRecognitionPermission = it }
                 )
 
                 val notificationPermissionLauncher = rememberLauncherForActivityResult(
@@ -91,9 +126,14 @@ class MainActivity : ComponentActivity() {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !hasNotificationPermission) {
                         notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                     }
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !hasActivityRecognitionPermission) {
+                        activityRecognitionPermissionLauncher.launch(Manifest.permission.ACTIVITY_RECOGNITION)
+                    }
                     if (!hasAudioPermission) {
                         audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                     }
+                    // Health Connect izinlerini de isteyelim (İsteğe bağlı: Bir butonla tetiklemek daha iyidir ama şimdilik başlangıca ekliyoruz)
+                    requestHealthPermissions.launch(healthPermissions)
                 }
 
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -125,6 +165,12 @@ class MainActivity : ComponentActivity() {
 fun MainScreen(gamificationManager: GamificationManager) {
     val navController = rememberNavController()
     val screens = remember { listOf(Screen.Home, Screen.Programs, Screen.Stats, Screen.Achievements, Screen.Profile) }
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
+
+    // Tam ekran olması gereken rotalar
+    val fullScreenRoutes = listOf(Screen.ActiveWorkout.route, Screen.WorkoutPlayer.route)
+    val isFullScreen = currentRoute in fullScreenRoutes
 
     // Global Badge State
     var activeBadge by remember { mutableStateOf<Badge?>(null) }
@@ -139,30 +185,32 @@ fun MainScreen(gamificationManager: GamificationManager) {
 
     Scaffold(
         bottomBar = {
-            NavigationBar {
-                val navBackStackEntry by navController.currentBackStackEntryAsState()
-                val currentDestination = navBackStackEntry?.destination
+            if (!isFullScreen) {
+                NavigationBar {
+                    val currentDestination = navBackStackEntry?.destination
 
-                screens.forEach { screen ->
-                    screen.icon?.let { icon ->
-                        NavigationBarItem(
-                            icon = { Icon(icon, contentDescription = stringResource(id = screen.titleRes)) },
-                            label = { Text(stringResource(id = screen.titleRes), style = MaterialTheme.typography.labelSmall) },
-                            selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true,
-                            onClick = {
-                                navController.navigate(screen.route) {
-                                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                                    launchSingleTop = true
-                                    restoreState = true
+                    screens.forEach { screen ->
+                        screen.icon?.let { icon ->
+                            NavigationBarItem(
+                                icon = { Icon(icon, contentDescription = stringResource(id = screen.titleRes)) },
+                                label = { Text(stringResource(id = screen.titleRes), style = MaterialTheme.typography.labelSmall) },
+                                selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true,
+                                onClick = {
+                                    navController.navigate(screen.route) {
+                                        popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                                        launchSingleTop = true
+                                        restoreState = true
+                                    }
                                 }
-                            }
-                        )
+                            )
+                        }
                     }
                 }
             }
         }
     ) { innerPadding ->
-        Box(modifier = Modifier.fillMaxSize().padding(innerPadding)){
+        val contentPadding = if (isFullScreen) PaddingValues(0.dp) else innerPadding
+        Box(modifier = Modifier.fillMaxSize().padding(contentPadding)){
             NavGraph(navController = navController)
 
             // --- Global Achievement Notification UI ---

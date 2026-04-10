@@ -11,6 +11,7 @@ import com.example.pushuptracker.audio.WorkoutService
 import com.example.pushuptracker.data.repo.PushupRepo
 import com.example.pushuptracker.data.repo.WaterRepo
 import com.example.pushuptracker.gamification.GamificationManager
+import com.example.pushuptracker.gamification.StreakManager
 import com.example.pushuptracker.model.ActivityRecord
 import com.example.pushuptracker.model.Streak
 import com.example.pushuptracker.model.WorkoutSummary
@@ -35,7 +36,8 @@ class HomeViewModel @Inject constructor(
     private val settingsManager: SettingsManager,
     private val pushupSensorManager: PushupSensorManager,
     private val updateManager: UpdateManager,
-    private val gamificationManager: GamificationManager
+    private val gamificationManager: GamificationManager,
+    private val streakManager: StreakManager
 ) : AndroidViewModel(application) {
 
     private val today: String get() = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
@@ -44,9 +46,24 @@ class HomeViewModel @Inject constructor(
     private val _updateInfo = MutableStateFlow<UpdateInfo?>(null)
     val updateInfo = _updateInfo.asStateFlow()
 
+    private val _remainingPushups = settingsManager.remainingPushupsFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
+    val remainingPushups = _remainingPushups
+
+    private var lastPushupUpdate: Double? = null
+    private var lastPushupFromPool: Boolean = false
+
+    private val _eventFlow = MutableSharedFlow<HomeEvent>()
+    val eventFlow = _eventFlow.asSharedFlow()
+
+    sealed class HomeEvent {
+        data class ShowUndoSnackbar(val message: String) : HomeEvent()
+        object TriggerHaptic : HomeEvent()
+    }
+
     init {
         viewModelScope.launch {
-            checkAndResetStreaks()
+            streakManager.checkAndResetWorkoutStreak()
             checkForUpdates()
         }
     }
@@ -69,108 +86,9 @@ class HomeViewModel @Inject constructor(
         _updateInfo.value = null
     }
 
-    private val pushupDataFlow = combine(
-        pushupRepo.getRecordForDate(today),
-        pushupRepo.getAllPushupRecords(),
-        settingsManager.dailyGoalFlow
-    ) { todayPushups, allPushups, dailyGoal ->
-        Triple(todayPushups, allPushups, dailyGoal)
-    }
-
-    private val waterDataFlow = combine(
-        waterRepo.getRecordForDate(today),
-        waterRepo.getAllRecords(),
-        settingsManager.dailyWaterGoalFlow
-    ) { todayWater, allWater, dailyGoal ->
-        Triple(todayWater, allWater, dailyGoal)
-    }
-
-    private val walkingDataFlow = combine(
-        pushupRepo.getRecordByDateAndType(today, "walking"),
-        pushupRepo.getRecordsByType("walking")
-    ) { todayWalking, allWalking ->
-        Pair(todayWalking, allWalking)
-    }
-
-    private val lymphaticDataFlow = combine(
-        pushupRepo.getRecordByDateAndType(today, "lymphatic"),
-        pushupRepo.getRecordsByType("lymphatic")
-    ) { todayLymphatic, allLymphatic ->
-        Pair(todayLymphatic, allLymphatic)
-    }
-
-    // Combine activity flows into one to stay under the 5-flow limit of the standard combine function
-    private val combinedActivitiesFlow = combine(
-        pushupDataFlow,
-        waterDataFlow,
-        walkingDataFlow,
-        lymphaticDataFlow
-    ) { pushup, water, walking, lymphatic ->
-        ActivitiesBundle(pushup, water, walking, lymphatic)
-    }
-
-    val homeScreenState = combine(
-        combinedActivitiesFlow,
-        settingsManager.currentStreakFlow,
-        settingsManager.lastWorkoutSummaryFlow
-    ) { bundle, workoutStreak, lastWorkoutSummary ->
-        val (todayPushups, allPushups, dailyPushupGoal) = bundle.pushup
-        val (todayWater, allWater, dailyWaterGoal) = bundle.water
-        val (todayWalking, allWalking) = bundle.walking
-        val (todayLymphatic, allLymphatic) = bundle.lymphatic
-
-        // Ağır filtreleme ve hesaplama işlemlerini yapıyoruz
-        val achievedPushupDates = allPushups.filter { it.value >= dailyPushupGoal }.map { it.date }.toSet()
-        val achievedWaterDates = allWater.filter { it.value >= dailyWaterGoal }.map { it.date }.toSet()
-        val achievedWalkingDates = allWalking.filter { it.value >= 33.0 }.map { it.date }.toSet()
-        val achievedLymphaticDates = allLymphatic.filter { it.value >= 7.0 }.map { it.date }.toSet()
-
-        val pushupStreakData = Streak(
-            count = calculateCurrentStreak(achievedPushupDates, isDaily = true),
-            isCompletedToday = (todayPushups?.value ?: 0.0) >= dailyPushupGoal,
-            type = Streak.Type.PUSHUP
-        )
-
-        val waterStreakData = Streak(
-            count = calculateCurrentStreak(achievedWaterDates, isDaily = true),
-            isCompletedToday = (todayWater?.value ?: 0.0) >= dailyWaterGoal,
-            type = Streak.Type.WATER
-        )
-
-        val walkingStreakData = Streak(
-            count = calculateCurrentStreak(achievedWalkingDates, isDaily = true),
-            isCompletedToday = (todayWalking?.value ?: 0.0) >= 33.0,
-            type = Streak.Type.WALKING
-        )
-
-        val lymphaticStreakData = Streak(
-            count = calculateCurrentStreak(achievedLymphaticDates, isDaily = true),
-            isCompletedToday = (todayLymphatic?.value ?: 0.0) >= 7.0,
-            type = Streak.Type.LYMPHATIC
-        )
-
-        val wasWorkoutCompletedToday = if (lastWorkoutSummary != null) {
-            val lastWorkoutDate = Instant.ofEpochMilli(lastWorkoutSummary.timestamp)
-                .atZone(ZoneId.systemDefault())
-                .toLocalDate()
-            lastWorkoutDate == LocalDate.now()
-        } else {
-            false
-        }
-
-        val workoutStreakData = Streak(
-            count = workoutStreak,
-            isCompletedToday = wasWorkoutCompletedToday,
-            type = Streak.Type.WORKOUT
-        )
-
-        HomeScreenState(
-            streaks = listOf(pushupStreakData, waterStreakData, walkingStreakData, lymphaticStreakData, workoutStreakData)
-        )
-
-    }
-    .flowOn(Dispatchers.Default) // DÜZELTME: Hesaplamaları Main Thread dışına (Arka plana) taşıdık.
-    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), HomeScreenState())
+    val homeScreenState = streakManager.getStreaksFlow()
+        .map { streaks -> HomeScreenState(streaks = streaks) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), HomeScreenState())
 
     fun startWalkingWorkout() {
         val intent = Intent(getApplication(), WorkoutService::class.java).apply {
@@ -190,7 +108,54 @@ class HomeViewModel @Inject constructor(
     }
 
     fun startAutoPushupCounting(onCountUpdate: (Int) -> Unit) {
-        pushupSensorManager.startListening(onCountUpdate)
+        var lastCount = 0
+        pushupSensorManager.startListening { count ->
+            val delta = count - lastCount
+            if (delta > 0) {
+                completePushup(delta)
+                lastCount = count
+                onCountUpdate(count)
+            }
+        }
+    }
+
+    fun completePushup(count: Int = 1) {
+        viewModelScope.launch {
+            val currentRem = remainingPushups.first()
+            if (currentRem > 0) {
+                settingsManager.saveRemainingPushups((currentRem - count.toDouble()).coerceAtLeast(0.0))
+                lastPushupFromPool = true
+            } else {
+                lastPushupFromPool = false
+            }
+            pushupRepo.addPushups(count.toDouble())
+            lastPushupUpdate = count.toDouble()
+            
+            _eventFlow.emit(HomeEvent.TriggerHaptic)
+            _eventFlow.emit(HomeEvent.ShowUndoSnackbar("$count şınav tamamlandı"))
+            
+            gamificationManager.checkAndUnlockAchievements()
+        }
+    }
+
+    fun undoLastPushup() {
+        viewModelScope.launch {
+            val count = lastPushupUpdate ?: return@launch
+            if (lastPushupFromPool) {
+                val currentRem = remainingPushups.first()
+                settingsManager.saveRemainingPushups(currentRem + count)
+            }
+            pushupRepo.addPushups(-count)
+            lastPushupUpdate = null
+        }
+    }
+
+    fun addRemainingPushups(value: Double) {
+        viewModelScope.launch {
+            val currentRem = remainingPushups.first()
+            settingsManager.saveRemainingPushups(currentRem + value)
+            _eventFlow.emit(HomeEvent.TriggerHaptic)
+        }
     }
 
     fun stopAutoPushupCounting() {
@@ -294,48 +259,8 @@ class HomeViewModel @Inject constructor(
             gamificationManager.checkAndUnlockAchievements()
         }
     }
-
-    private fun calculateCurrentStreak(dates: Set<String>, isDaily: Boolean): Int {
-        if (dates.isEmpty()) return 0
-        var streak = 0
-        var currentDate = LocalDate.now()
-        if (!dates.contains(currentDate.toString())) {
-            currentDate = currentDate.minusDays(1)
-            if (!dates.contains(currentDate.toString())) {
-                if (!isDaily) {
-                    val yesterdayDay = currentDate.dayOfWeek
-                    if (yesterdayDay == DayOfWeek.THURSDAY || yesterdayDay == DayOfWeek.SUNDAY) {
-                        currentDate = currentDate.minusDays(1)
-                    }
-                }
-                if (!dates.contains(currentDate.toString())) return 0
-            }
-        }
-        while (dates.contains(currentDate.toString()) || (!isDaily && isRestDay(currentDate))) {
-            if (dates.contains(currentDate.toString())) {
-                streak++
-            }
-            currentDate = currentDate.minusDays(1)
-        }
-        return streak
-    }
-
-    private fun isRestDay(date: LocalDate): Boolean {
-        val day = date.ofDayOfWeek ?: date.dayOfWeek // Güvenli erişim
-        return day == DayOfWeek.THURSDAY || day == DayOfWeek.SUNDAY
-    }
 }
-
-// Extension property to fix potentially missing dayOfWeek access if needed
-val LocalDate.ofDayOfWeek: DayOfWeek? get() = this.dayOfWeek
 
 data class HomeScreenState(
     val streaks: List<Streak> = emptyList()
-)
-
-data class ActivitiesBundle(
-    val pushup: Triple<ActivityRecord?, List<ActivityRecord>, Int>,
-    val water: Triple<ActivityRecord?, List<ActivityRecord>, Int>,
-    val walking: Pair<ActivityRecord?, List<ActivityRecord>>,
-    val lymphatic: Pair<ActivityRecord?, List<ActivityRecord>>
 )

@@ -20,4 +20,5 @@ sealed class Screen(val route: String, @field:StringRes val titleRes: Int, val i
     object WorkoutEditor : Screen("workout_editor/{workoutId}", R.string.programs, null) {
         fun createRoute(workoutId: Long) = "workout_editor/$workoutId"
     }
+    object ActiveWorkout : Screen("active_workout", R.string.programs, null)
 }

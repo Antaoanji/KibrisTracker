@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.pushuptracker.data.HealthConnectManager
 import com.example.pushuptracker.data.local.WorkoutRecordDao
 import com.example.pushuptracker.data.repo.PushupRepo
+import com.example.pushuptracker.gamification.StreakManager
 import com.example.pushuptracker.model.ActivityRecord
 import com.example.pushuptracker.model.WorkoutRecord
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -35,6 +36,7 @@ data class OverallStats(
     val totalPushups: Int = 0,
     val totalWater: Int = 0,
     val totalCalories: Int = 0,
+    val weeklyCalories: Int = 0,
     val totalWorkouts: Int = 0,
     val totalWalkingMinutes: Int = 0,
     val totalLymphaticCount: Int = 0,
@@ -54,7 +56,8 @@ data class ChangeStats(
 class StatsViewModel @Inject constructor(
     private val pushupRepo: PushupRepo,
     private val workoutRecordDao: WorkoutRecordDao,
-    private val healthConnectManager: HealthConnectManager
+    private val healthConnectManager: HealthConnectManager,
+    private val streakManager: StreakManager
 ) : ViewModel() {
 
     val chartTimeSpan = MutableStateFlow(ChartTimeSpan.WEEK)
@@ -191,27 +194,35 @@ class StatsViewModel @Inject constructor(
     val overallStats = combine(
         pushupRepo.getAllRecords(),
         pushupRepo.getRecordsByType("calories"),
-        workoutRecordDao.getAllRecords()
-    ) { records, calorieRecords, workoutRecords ->
+        workoutRecordDao.getAllRecords(),
+        streakManager.getStreaksFlow()
+    ) { records, calorieRecords, workoutRecords, streaks ->
         val totalPushups = records.filter { it.type == "pushup" }.sumOf { it.value }.toInt()
         val totalWater = records.filter { it.type == "water" }.sumOf { it.value }.toInt()
+        
+        // Kalori Hesaplamaları
         val totalCalories = calorieRecords.sumOf { it.value }.toInt()
+        
+        val today = LocalDate.now()
+        val weekFields = WeekFields.of(Locale.getDefault())
+        val startOfThisWeek = today.with(weekFields.dayOfWeek(), 1)
+        
+        val weeklyCalories = calorieRecords.filter {
+            val date = try { LocalDate.parse(it.date) } catch (e: Exception) { null }
+            date != null && !date.isBefore(startOfThisWeek)
+        }.sumOf { it.value }.toInt()
         
         val totalWorkouts = workoutRecords.size
         val totalWalkingMinutes = records.filter { it.type == "walking" }.sumOf { it.value }.toInt()
         val totalLymphaticCount = records.filter { it.type == "lymphatic" }.size
 
-        // Calculate workout-based streak
-        val workoutDates = workoutRecords.mapNotNull {
-            try { LocalDate.parse(it.date) } catch (e: Exception) { null }
-        }.distinct().sortedDescending()
-
-        val currentStreak = calculateWorkoutStreak(workoutDates)
+        val currentStreak = streaks.find { it.type == com.example.pushuptracker.model.Streak.Type.WORKOUT }?.count ?: 0
 
         OverallStats(
             totalPushups = totalPushups, 
             totalWater = totalWater, 
             totalCalories = totalCalories,
+            weeklyCalories = weeklyCalories,
             totalWorkouts = totalWorkouts,
             totalWalkingMinutes = totalWalkingMinutes,
             totalLymphaticCount = totalLymphaticCount,
@@ -220,48 +231,6 @@ class StatsViewModel @Inject constructor(
     }
     .flowOn(Dispatchers.Default)
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), OverallStats())
-
-    private fun calculateWorkoutStreak(dates: List<LocalDate>): Int {
-        if (dates.isEmpty()) return 0
-
-        val workoutDays = setOf(DayOfWeek.MONDAY, DayOfWeek.TUESDAY, DayOfWeek.WEDNESDAY, DayOfWeek.FRIDAY, DayOfWeek.SATURDAY)
-        val today = LocalDate.now()
-
-        var checkDate = today
-        if (!workoutDays.contains(checkDate.dayOfWeek) || !dates.contains(checkDate)) {
-            checkDate = getPreviousExpectedWorkoutDay(checkDate)
-        }
-
-        if (!dates.contains(checkDate)) {
-            return 0
-        }
-
-        var streak = 0
-        var currentIdxDate = checkDate
-
-        while (true) {
-            if (workoutDays.contains(currentIdxDate.dayOfWeek)) {
-                if (dates.contains(currentIdxDate)) {
-                    streak++
-                } else {
-                    break
-                }
-            }
-            currentIdxDate = currentIdxDate.minusDays(1)
-            if (streak > 1000) break
-        }
-
-        return streak
-    }
-
-    private fun getPreviousExpectedWorkoutDay(date: LocalDate): LocalDate {
-        val workoutDays = setOf(DayOfWeek.MONDAY, DayOfWeek.TUESDAY, DayOfWeek.WEDNESDAY, DayOfWeek.FRIDAY, DayOfWeek.SATURDAY)
-        var d = date.minusDays(1)
-        while (!workoutDays.contains(d.dayOfWeek)) {
-            d = d.minusDays(1)
-        }
-        return d
-    }
 
     val weeklyChange = workoutRecordDao.getAllRecords().map { records ->
         val today = LocalDate.now()

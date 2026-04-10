@@ -199,6 +199,14 @@ class SettingsManager @Inject constructor(private val dataStore: DataStore<Prefe
             it[unlockedBadgesKey] = currentBadges + badgeId
         }
     }
+    // --- Push-up Pool (Remaining) ---
+    private val remainingPushupsKey = doublePreferencesKey("remaining_pushups")
+    val remainingPushupsFlow: Flow<Double> = dataStore.data.map { it[remainingPushupsKey] ?: 0.0 }
+
+    suspend fun saveRemainingPushups(value: Double) {
+        dataStore.edit { it[remainingPushupsKey] = value }
+    }
+
     suspend fun clearAllData() {
         dataStore.edit { it.clear() }
     }

@@ -7,6 +7,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.example.pushuptracker.ui.achievements.AchievementsScreen
+import com.example.pushuptracker.ui.active.ActiveWorkoutScreen
 import com.example.pushuptracker.ui.home.HomeScreen
 import com.example.pushuptracker.ui.profile.ProfileScreen
 import com.example.pushuptracker.ui.programs.ProgramsScreen
@@ -18,7 +19,7 @@ import com.example.pushuptracker.ui.stats.StatsScreen
 fun NavGraph(navController: NavHostController) {
     NavHost(navController = navController, startDestination = Screen.Home.route) {
         composable(Screen.Home.route) {
-            HomeScreen()
+            HomeScreen(navController = navController)
         }
         composable(Screen.Programs.route) {
             ProgramsScreen(navController = navController)
@@ -40,6 +41,9 @@ fun NavGraph(navController: NavHostController) {
             arguments = listOf(navArgument("workoutId") { type = NavType.LongType })
         ) {
             WorkoutEditorScreen(navController = navController)
+        }
+        composable(Screen.ActiveWorkout.route) {
+            ActiveWorkoutScreen(navController = navController)
         }
     }
 }

@@ -1,9 +1,12 @@
 package com.example.pushuptracker.ui.programs
 
 import android.app.Application
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.ServiceConnection
 import android.media.AudioManager
+import android.os.IBinder
 import android.os.SystemClock
 import android.util.Log
 import android.view.KeyEvent
@@ -65,8 +68,6 @@ class WorkoutPlayerViewModel @Inject constructor(
     private val gamificationManager: GamificationManager
 ) : AndroidViewModel(application) {
 
-    private val audioManager = application.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-
     private val _workoutState = MutableStateFlow<WorkoutState>(WorkoutState.Loading)
     val workoutState = _workoutState.asStateFlow()
 
@@ -85,32 +86,79 @@ class WorkoutPlayerViewModel @Inject constructor(
     private val _machineLevel = MutableStateFlow(5)
     val machineLevel = _machineLevel.asStateFlow()
 
-    val newBadgeUnlocked = gamificationManager.newBadgeUnlocked
+    private var workoutService: WorkoutService? = null
+    private var serviceConnection: ServiceConnection? = null
+    private var serviceJob: Job? = null
 
-    private var timerJob: Job? = null
-    private var exerciseTimerJob: Job? = null
-    private var stateUpdateJob: Job? = null
     private var startTimeMillis: Long = 0L
     private var sessionVolume: Double = 0.0
     private val sessionDifficulties = mutableListOf<String>()
 
     init {
+        bindToService()
         loadStateAndStart()
+    }
+
+    private fun bindToService() {
+        serviceConnection = object : ServiceConnection {
+            override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+                val binder = service as WorkoutService.WorkoutBinder
+                workoutService = binder.getService()
+                observeServiceTimer()
+            }
+            override fun onServiceDisconnected(name: ComponentName?) {
+                workoutService = null
+            }
+        }
+        val intent = Intent(getApplication(), WorkoutService::class.java)
+        getApplication<Application>().bindService(intent, serviceConnection!!, Context.BIND_AUTO_CREATE)
+    }
+
+    private fun observeServiceTimer() {
+        serviceJob?.cancel()
+        serviceJob = viewModelScope.launch {
+            workoutService?.timerState?.collect { timerState ->
+                if (timerState == null) return@collect
+
+                val currentState = _workoutState.value
+                when (currentState) {
+                    is WorkoutState.Resting -> {
+                        if (timerState.remainingSeconds <= 0) {
+                            onRestFinished()
+                        } else {
+                            _workoutState.value = currentState.copy(remainingTime = timerState.remainingSeconds)
+                        }
+                    }
+                    is WorkoutState.InProgress -> {
+                        if (timerState.isWorkoutTimer) {
+                            if (timerState.remainingSeconds <= 0) {
+                                audioCoach.announceExercise("Süre bitti!")
+                                delay(1000)
+                                onSetFinished("medium", "Otomatik Tamamlandı", null)
+                            } else {
+                                _workoutState.value = currentState.copy(
+                                    remainingExerciseTime = timerState.remainingSeconds,
+                                    isTimerPaused = timerState.isPaused
+                                )
+                            }
+                        }
+                    }
+                    else -> {}
+                }
+            }
+        }
     }
 
     private fun loadStateAndStart() = viewModelScope.launch {
         sessionVolume = 0.0
         sessionDifficulties.clear()
         
-        // Önce kaydedilmiş bir ilerleme var mı kontrol et (Persistence)
         val savedState = settingsManager.savedWorkoutStateFlow.first()
         val currentWorkout = workoutHolder.workout
 
         if (savedState != null && currentWorkout != null && savedState.first == currentWorkout.title) {
-            // Eğer kaydedilen antrenman şu an açılan ile aynıysa, oradan devam et
             workoutHolder.currentExerciseIndex = savedState.second
             workoutHolder.currentSetIndex = savedState.third
-            Log.d("WorkoutPlayerVM", "Restoring progress: Ex ${savedState.second}, Set ${savedState.third}")
         }
 
         val workout = workoutHolder.workout
@@ -120,8 +168,7 @@ class WorkoutPlayerViewModel @Inject constructor(
         }
 
         startTimeMillis = System.currentTimeMillis()
-        val exercise = workout.exercises[workoutHolder.currentExerciseIndex]
-        updateStateWithHistory(exercise, workoutHolder.currentSetIndex)
+        updateStateWithHistory(workout.exercises[workoutHolder.currentExerciseIndex], workoutHolder.currentSetIndex)
     }
 
     private fun saveCurrentProgress() {
@@ -181,10 +228,6 @@ class WorkoutPlayerViewModel @Inject constructor(
     }
 
     fun onSetFinished(difficulty: String, note: String? = null, actualReps: Int? = null) = viewModelScope.launch {
-        timerJob?.cancel()
-        exerciseTimerJob?.cancel()
-        stateUpdateJob?.cancel()
-
         val workout = workoutHolder.workout ?: return@launch
         val currentExercise = workout.exercises[workoutHolder.currentExerciseIndex]
         val category = getCategory(currentExercise.name)
@@ -226,24 +269,20 @@ class WorkoutPlayerViewModel @Inject constructor(
             machineLevel = if (category == ExerciseCategory.MACHINE) _machineLevel.value else null
         )
 
-        try {
-            pushupRepo.insertRecord(record)
-        } catch (e: Exception) {
-            Log.e("WorkoutPlayerVM", "Room Error: ${e.message}")
-        }
+        try { pushupRepo.insertRecord(record) } catch (e: Exception) { Log.e("WorkoutPlayerVM", "Room Error: ${e.message}") }
 
         sessionVolume += (finalWeight ?: 0.0) * calculatedReps
         sessionDifficulties.add(difficulty)
 
         if (workoutHolder.currentSetIndex < currentExercise.sets) {
             workoutHolder.currentSetIndex++
-            saveCurrentProgress() // Set tamamlandı, kaydet
+            saveCurrentProgress()
             startRest(currentExercise.restTimeSeconds, currentExercise, workoutHolder.currentSetIndex)
         } else {
             workoutHolder.currentExerciseIndex++
             if (workoutHolder.currentExerciseIndex < workout.exercises.size) {
                 workoutHolder.currentSetIndex = 1
-                saveCurrentProgress() // Egzersiz değişti, kaydet
+                saveCurrentProgress()
                 val nextExercise = workout.exercises[workoutHolder.currentExerciseIndex]
                 startRest(currentExercise.restTimeSeconds, nextExercise, 1)
             } else {
@@ -276,7 +315,6 @@ class WorkoutPlayerViewModel @Inject constructor(
     }
 
     fun moveToNextExercise() = viewModelScope.launch {
-        timerJob?.cancel(); exerciseTimerJob?.cancel(); stateUpdateJob?.cancel()
         val workout = workoutHolder.workout ?: return@launch
         if (workoutHolder.currentExerciseIndex < workout.exercises.size - 1) {
             workoutHolder.currentExerciseIndex++; workoutHolder.currentSetIndex = 1
@@ -286,7 +324,6 @@ class WorkoutPlayerViewModel @Inject constructor(
     }
 
     fun moveToPreviousExercise() = viewModelScope.launch {
-        timerJob?.cancel(); exerciseTimerJob?.cancel(); stateUpdateJob?.cancel()
         val workout = workoutHolder.workout ?: return@launch
         if (workoutHolder.currentExerciseIndex > 0) {
             workoutHolder.currentExerciseIndex--; workoutHolder.currentSetIndex = 1
@@ -300,7 +337,6 @@ class WorkoutPlayerViewModel @Inject constructor(
         if (currentState is WorkoutState.InProgress) {
             val initialTime = parseExerciseTime(currentState.exercise.reps)
             if (initialTime != null) {
-                _workoutState.value = currentState.copy(remainingExerciseTime = initialTime, isTimerPaused = false)
                 startExerciseTimer(initialTime)
             }
         }
@@ -316,15 +352,10 @@ class WorkoutPlayerViewModel @Inject constructor(
     }
 
     fun toggleExerciseTimer() {
-        val currentState = _workoutState.value
-        if (currentState is WorkoutState.InProgress && currentState.remainingExerciseTime != null) {
-            val newPausedState = !currentState.isTimerPaused
-            _workoutState.value = currentState.copy(isTimerPaused = newPausedState)
-            if (newPausedState) {
-                exerciseTimerJob?.cancel()
-                updateNotification("Duraklatıldı: ${currentState.exercise.name}", "${currentState.remainingExerciseTime} sn kaldı")
-            } else { startExerciseTimer(currentState.remainingExerciseTime!!) }
+        val intent = Intent(getApplication(), WorkoutService::class.java).apply {
+            action = if (_workoutState.value.let { it is WorkoutState.InProgress && it.isTimerPaused }) "RESUME" else "PAUSE"
         }
+        getApplication<Application>().startService(intent)
     }
 
     private fun finishWorkout(isPlanFinished: Boolean) {
@@ -336,28 +367,28 @@ class WorkoutPlayerViewModel @Inject constructor(
         _workoutState.value = WorkoutState.Finished(totalTimeMinutes, sessionVolume, getDominantDifficulty(), workoutTitle)
         
         viewModelScope.launch {
-            // Antrenman bitti, ilerlemeyi temizle
             settingsManager.clearSavedWorkoutProgress()
-
             val summary = WorkoutSummary(workoutTitle, totalTimeMinutes, 0, System.currentTimeMillis())
             settingsManager.saveLastWorkoutSummary(summary)
             
             val todayDate = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+            // WorkoutRecord parametre uyuşmazlığı giderildi
             workoutRecordDao.insertRecord(
                 WorkoutRecord(
-                    title = workoutTitle,
-                    durationMinutes = totalTimeMinutes,
-                    date = todayDate,
+                    id = 0, 
+                    title = workoutTitle, 
+                    durationMinutes = totalTimeMinutes, 
+                    date = todayDate, 
                     timestamp = System.currentTimeMillis()
                 )
             )
             
             pushupRepo.insertRecord(
                 ActivityRecord(
-                    type = workoutTitle,
-                    value = 1.0,
-                    date = todayDate,
-                    timestamp = System.currentTimeMillis(),
+                    type = workoutTitle, 
+                    value = 1.0, 
+                    date = todayDate, 
+                    timestamp = System.currentTimeMillis(), 
                     note = "Workout Completed"
                 )
             )
@@ -374,36 +405,40 @@ class WorkoutPlayerViewModel @Inject constructor(
     }
 
     private fun startRest(duration: Int, nextExercise: Exercise, nextSet: Int) {
-        timerJob?.cancel(); exerciseTimerJob?.cancel()
         audioCoach.announceExercise("Dinlen, $duration saniye. Sıradaki: ${nextExercise.name}, $nextSet. set.")
 
         val workout = workoutHolder.workout
         val total = workout?.exercises?.size ?: 0
         val currentIdx = workoutHolder.currentExerciseIndex + 1
-        val title = "($currentIdx/$total) Dinlenme: $duration sn"
-        val content = "Sıradaki: ${nextExercise.name} ($nextSet. Set)"
+        val title = "($currentIdx/$total) Dinlenme"
         
-        updateNotification(title, content)
-        
-        timerJob = viewModelScope.launch {
-            var remainingTime = duration
-            while (remainingTime > 0) {
-                _workoutState.value = WorkoutState.Resting(nextExercise, nextSet, remainingTime, duration)
-                val liveTitle = "($currentIdx/$total) Dinlenme: $remainingTime sn"
-                updateNotification(liveTitle, content)
-                if (remainingTime == 3) { launch { audioCoach.playCountdown() } }
-                delay(1000); remainingTime--
-            }
-            onRestFinished()
+        _workoutState.value = WorkoutState.Resting(nextExercise, nextSet, duration, duration)
+
+        val intent = Intent(getApplication(), WorkoutService::class.java).apply {
+            action = "START_TIMER"
+            putExtra("seconds", duration)
+            putExtra("label", title)
         }
+        getApplication<Application>().startService(intent)
     }
 
-    fun skipRest() { timerJob?.cancel(); audioCoach.stop(); onRestFinished() }
+    fun skipRest() {
+        val intent = Intent(getApplication(), WorkoutService::class.java).apply { action = "STOP" }
+        getApplication<Application>().startService(intent)
+        onRestFinished()
+    }
+
     fun addRestTime() {
         val currentState = _workoutState.value
         if (currentState is WorkoutState.Resting) {
-            timerJob?.cancel(); audioCoach.stop()
-            startRest(currentState.remainingTime + 15, currentState.nextExercise, currentState.nextSet)
+            val newTime = currentState.remainingTime + 15
+            _workoutState.value = currentState.copy(remainingTime = newTime, initialDuration = newTime)
+            val intent = Intent(getApplication(), WorkoutService::class.java).apply {
+                action = "START_TIMER"
+                putExtra("seconds", newTime)
+                putExtra("label", "Dinlenme")
+            }
+            getApplication<Application>().startService(intent)
         }
     }
 
@@ -414,102 +449,62 @@ class WorkoutPlayerViewModel @Inject constructor(
     }
 
     private suspend fun updateStateWithHistory(exercise: Exercise, setIndex: Int) {
-        stateUpdateJob?.cancel()
         val key = if (exercise.searchKey.isNotBlank()) exercise.searchKey else exercise.name
         val lastRecord = pushupRepo.getLastRecordForExercise(key)
         val category = getCategory(exercise.name)
 
         lastRecord?.let {
             _selectedBarWeight.value = it.barWeight ?: if (category == ExerciseCategory.DUMBBELL) 2.0 else if (category == ExerciseCategory.BODYWEIGHT) 0.0 else 10.0
-            val plateList = it.plates?.split(",")?.mapNotNull { p -> p.toDoubleOrNull() } ?: emptyList()
-            _selectedPlates.value = plateList
+            _selectedPlates.value = it.plates?.split(",")?.mapNotNull { p -> p.toDoubleOrNull() } ?: emptyList()
             _machineMode.value = it.machineMode ?: "Medium"
             _machineLevel.value = it.machineLevel ?: 5
             calculateTotal(category)
         } ?: run {
-            _selectedBarWeight.value = when (category) {
-                ExerciseCategory.DUMBBELL -> 2.0
-                ExerciseCategory.BODYWEIGHT -> 0.0
-                else -> 10.0
-            }
+            _selectedBarWeight.value = when (category) { ExerciseCategory.DUMBBELL -> 2.0; ExerciseCategory.BODYWEIGHT -> 0.0; else -> 10.0 }
             _selectedPlates.value = emptyList()
-            _machineMode.value = "Medium"
-            _machineLevel.value = 5
-            calculateTotal(category)
+            _machineMode.value = "Medium"; _machineLevel.value = 5; calculateTotal(category)
         }
 
-        val coachSuggestion = lastRecord?.let {
-            when (it.difficulty) {
-                "easy" -> "Geçen sefer kolaydı. Seviyeyi biraz artırabilirsin! 🚀"
-                "medium" -> "Formun iyiydi. Tekniğini koru. 👍"
-                "hard" -> "Geçen sefer zorlandın. Aynı seviyede kal. 🛡️"
-                else -> null
-            }
-        } ?: "İlk kez yapıyorsun, başarılar!"
-
-        val repsAnons = if (exercise.reps.contains("MAX", true)) "Maksimum tekrar" else "${exercise.reps} tekrar"
-
-        val weightAnons = if (setIndex == 1) {
-            lastRecord?.let {
-                if (category == ExerciseCategory.MACHINE) "Geçen sefer ${it.machineMode} modunda seviye ${it.machineLevel} yapmıştın."
-                else if ((it.weightUsed ?: 0.0) > 0) "Geçen sefer ${it.weightUsed} kilogram ile yapmıştın."
-                else null
-            } ?: ""
-        } else ""
-
-        audioCoach.announceExercise("${exercise.name}. $setIndex. set. Hedef $repsAnons. $weightAnons")
+        audioCoach.announceExercise("${exercise.name}. $setIndex. set. Hedef ${if (exercise.reps.contains("MAX", true)) "Maksimum tekrar" else "${exercise.reps} tekrar"}")
 
         val initialTime = parseExerciseTime(exercise.reps)
-
-        _workoutState.value = WorkoutState.InProgress(exercise, category, setIndex, workoutHolder.workout!!.exercises.size, workoutHolder.currentExerciseIndex + 1,
-            coachSuggestion, initialTime, false
-        )
+        _workoutState.value = WorkoutState.InProgress(exercise, category, setIndex, workoutHolder.workout!!.exercises.size, workoutHolder.currentExerciseIndex + 1, null, initialTime, false)
 
         val workoutTotal = workoutHolder.workout?.exercises?.size ?: 0
         val currentExIdx = workoutHolder.currentExerciseIndex + 1
         
         if (initialTime != null) {
-            updateNotification("($currentExIdx/$workoutTotal) ${exercise.name}", "Hazırlanılıyor...")
-            stateUpdateJob = viewModelScope.launch { delay(2500); val cur = _workoutState.value; if (cur is WorkoutState.InProgress) { _workoutState.value = cur.copy(); startExerciseTimer(initialTime) } }
+            startExerciseTimer(initialTime)
         } else {
-            updateNotification("($currentExIdx/$workoutTotal) ${exercise.name}", "$setIndex. Set yapılıyor")
+            updateServiceUI("($currentExIdx/$workoutTotal) ${exercise.name}", "$setIndex. Set yapılıyor")
         }
     }
 
     private fun startExerciseTimer(seconds: Int) {
-        exerciseTimerJob?.cancel()
-        exerciseTimerJob = viewModelScope.launch {
-            var time = seconds
-            val total = workoutHolder.workout?.exercises?.size ?: 0
-            val currentIdx = workoutHolder.currentExerciseIndex + 1
-            val exName = _workoutState.value.let { if (it is WorkoutState.InProgress) it.exercise.name else "Antrenman" }
-            
-            while (time > 0) {
-                val cur = _workoutState.value
-                if (cur is WorkoutState.InProgress) {
-                    if (cur.isTimerPaused) break
-                    _workoutState.value = cur.copy(remainingExerciseTime = time)
-                    updateNotification("($currentIdx/$total) $exName", "$time sn kaldı")
-                    if (time == 3) { launch { audioCoach.playCountdown() } }
-                }
-                delay(1000); time--
-            }
-            if (time <= 0) { audioCoach.announceExercise("Süre bitti!"); delay(1000); onSetFinished("medium", "Otomatik Tamamlandı", null) }
+        val total = workoutHolder.workout?.exercises?.size ?: 0
+        val currentIdx = workoutHolder.currentExerciseIndex + 1
+        val exName = (workoutState.value as? WorkoutState.InProgress)?.exercise?.name ?: "Antrenman"
+
+        val intent = Intent(getApplication(), WorkoutService::class.java).apply {
+            action = "START_WORKOUT_TIMER"
+            putExtra("seconds", seconds)
+            putExtra("label", "($currentIdx/$total) $exName")
         }
+        getApplication<Application>().startService(intent)
     }
 
-    private fun updateNotification(title: String, content: String) {
+    private fun updateServiceUI(title: String, content: String) {
         val intent = Intent(getApplication(), WorkoutService::class.java).apply {
+            action = "UPDATE_UI"
             putExtra("title", title)
             putExtra("content", content)
         }
-        getApplication<Application>().startForegroundService(intent)
+        getApplication<Application>().startService(intent)
     }
 
     override fun onCleared() {
+        serviceConnection?.let { getApplication<Application>().unbindService(it) }
+        serviceJob?.cancel()
         super.onCleared()
-        timerJob?.cancel()
-        exerciseTimerJob?.cancel()
-        stateUpdateJob?.cancel()
     }
 }

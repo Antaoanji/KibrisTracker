@@ -358,8 +358,6 @@ fun ExerciseScreen(
     val finalProgress = if (exercise.sets > 0) set.toFloat() / exercise.sets.toFloat() else 0f
     val animatedProgress by animateFloatAsState(targetValue = if (buttonClicked) finalProgress else initialProgress, animationSpec = tween(durationMillis = 750), label = "")
 
-    val isWarmup = exercise.name.contains("Isınma", ignoreCase = true) || exercise.name.contains("Hafif", ignoreCase = true)
-
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -397,16 +395,6 @@ fun ExerciseScreen(
             }
 
             Spacer(Modifier.height(8.dp))
-
-            if (coachSuggestion != null) {
-                val suggestionColor = when {
-                    coachSuggestion.contains("kolay", true) -> Color(0xFF4CAF50)
-                    coachSuggestion.contains("formun iyiydi", true) -> Color(0xFFFFC107)
-                    coachSuggestion.contains("zorlandın", true) -> Color(0xFFF44336)
-                    else -> Color(0xFF00F5D4)
-                }
-                Text(text = "💡 $coachSuggestion", style = MaterialTheme.typography.bodySmall, color = suggestionColor, textAlign = TextAlign.Center)
-            }
 
             Spacer(Modifier.height(12.dp))
 
@@ -533,32 +521,21 @@ fun ExerciseScreen(
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
-            if (isWarmup) {
-                Button(
-                    onClick = {
-                        if (!buttonClicked) {
-                            buttonClicked = true
-                            scope.launch {
-                                delay(500L)
-                                onSetFinished("medium", noteInput, repsInput.toIntOrNull())
-                            }
+            Button(
+                onClick = {
+                    if (!buttonClicked) {
+                        buttonClicked = true
+                        scope.launch {
+                            delay(500L)
+                            onSetFinished("medium", noteInput, repsInput.toIntOrNull())
                         }
-                    },
-                    modifier = Modifier.fillMaxWidth().height(52.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00F5D4))
-                ) {
-                    Text("TAMAMLA", fontWeight = FontWeight.ExtraBold, color = Color.Black, fontSize = 18.sp)
-                }
-            } else {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    DifficultyButton("Kolay", Color(0xFF4CAF50), Modifier.weight(1f)) { if(!buttonClicked) { buttonClicked = true; scope.launch { delay(500L); onSetFinished("easy", noteInput, repsInput.toIntOrNull()) } } }
-                    DifficultyButton("Orta", Color(0xFFFFC107), Modifier.weight(1f)) { if(!buttonClicked) { buttonClicked = true; scope.launch { delay(500L); onSetFinished("medium", noteInput, repsInput.toIntOrNull()) } } }
-                    DifficultyButton("Zor", Color(0xFFF44336), Modifier.weight(1f)) { if(!buttonClicked) { buttonClicked = true; scope.launch { delay(500L); onSetFinished("hard", noteInput, repsInput.toIntOrNull()) } } }
-                }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00F5D4))
+            ) {
+                Text("TAMAMLA", fontWeight = FontWeight.ExtraBold, color = Color.Black, fontSize = 18.sp)
             }
         }
     }

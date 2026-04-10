@@ -40,7 +40,6 @@ class WorkoutService : Service() {
     private val channelId = "workout_channel"
     
     private var timerJob: Job? = null
-    // DÜZELTME: Daha yüksek öncelikli bir Dispatcher kullanarak sistem kısıtlamalarını minimize ediyoruz.
     private val serviceScope = CoroutineScope(Dispatchers.Main.immediate + SupervisorJob())
     private var wakeLock: PowerManager.WakeLock? = null
 
@@ -53,7 +52,7 @@ class WorkoutService : Service() {
     private val _lymphaticState = MutableStateFlow<LymphaticState?>(null)
     val lymphaticState = _lymphaticState.asStateFlow()
 
-    data class TimerState(val remainingSeconds: Int, val isPaused: Boolean, val label: String)
+    data class TimerState(val remainingSeconds: Int, val isPaused: Boolean, val label: String, val isWorkoutTimer: Boolean = false)
     data class WalkingState(val remainingSeconds: Int, val isPaused: Boolean, val isFastMode: Boolean)
     data class LymphaticState(
         val currentMovementIndex: Int,
@@ -83,8 +82,6 @@ class WorkoutService : Service() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        // CPU'nun asla uykuya dalmamasını sağlıyoruz.
-        acquireWakeLock()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -96,11 +93,17 @@ class WorkoutService : Service() {
             "START_WALKING" -> startWalkingTimer()
             "START_LYMPHATIC" -> startLymphaticTimer()
             "SKIP_LYMPHATIC" -> skipLymphaticMovement()
-            "START_TIMER" -> startGeneralTimer(initialSeconds, label)
+            "START_TIMER" -> startGeneralTimer(initialSeconds, label, false)
+            "START_WORKOUT_TIMER" -> startGeneralTimer(initialSeconds, label, true)
             "PAUSE" -> pauseActive()
             "RESUME" -> resumeActive()
             "STOP" -> stopAll(saveProgress = true)
             "CANCEL" -> stopAll(saveProgress = false)
+            "UPDATE_UI" -> {
+                val title = intent?.getStringExtra("title") ?: "Antrenman"
+                val content = intent?.getStringExtra("content") ?: ""
+                updateNotification(title, content, true)
+            }
             else -> {
                 val title = intent?.getStringExtra("title") ?: "Antrenman Devam Ediyor"
                 val content = intent?.getStringExtra("content") ?: ""
@@ -108,7 +111,7 @@ class WorkoutService : Service() {
             }
         }
         
-        return START_STICKY // DÜZELTME: Sistemin servisi öldürmesi durumunda otomatik geri başlatılmasını sağlar.
+        return START_STICKY
     }
 
     private fun acquireWakeLock() {
@@ -117,18 +120,26 @@ class WorkoutService : Service() {
             wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "KibrisTracker:WorkoutWakeLock")
         }
         if (wakeLock?.isHeld == false) {
-            wakeLock?.acquire()
+            // Maksimum 4 saatlik bir kilit koy (Güvenlik önlemi)
+            wakeLock?.acquire(4 * 60 * 60 * 1000L)
         }
     }
 
-    private fun startGeneralTimer(seconds: Int, label: String) {
-        _timerState.value = TimerState(seconds, false, label)
+    private fun releaseWakeLock() {
+        if (wakeLock?.isHeld == true) {
+            wakeLock?.release()
+        }
+    }
+
+    private fun startGeneralTimer(seconds: Int, label: String, isWorkout: Boolean) {
+        _timerState.value = TimerState(seconds, false, label, isWorkout)
         _walkingState.value = null
         _lymphaticState.value = null
         runGeneralTimer()
     }
 
     private fun runGeneralTimer() {
+        acquireWakeLock()
         timerJob?.cancel()
         timerJob = serviceScope.launch {
             while (isActive) {
@@ -144,7 +155,8 @@ class WorkoutService : Service() {
                 delay(1000)
             }
             if (_timerState.value?.remainingSeconds ?: 0 <= 0) {
-                audioCoach.announceExercise("Süre bitti!")
+                val wasWorkout = _timerState.value?.isWorkoutTimer ?: false
+                if (!wasWorkout) audioCoach.announceExercise("Süre bitti!")
             }
         }
     }
@@ -157,6 +169,7 @@ class WorkoutService : Service() {
     }
 
     private fun runWalkingTimer() {
+        acquireWakeLock()
         timerJob?.cancel()
         timerJob = serviceScope.launch {
             while (isActive) {
@@ -173,7 +186,9 @@ class WorkoutService : Service() {
                 updateNotification("Japon Yürüyüşü: $timeStr", if (isFast) "🔥 HIZLI TEMPO" else "🍃 YAVAŞ TEMPO", true)
 
                 if (newTime > 0 && newTime % 180 == 0) {
-                    audioCoach.announceExercise(if (isFast) "Hızlanma zamanı!" else "Yavaşla ve nefeslen.")
+                    // Bir sonraki bloğun temposuna bakıyoruz
+                    val nextIsFast = ((elapsed + 1) / 180) % 2 != 0
+                    audioCoach.announceExercise(if (nextIsFast) "Hızlanma zamanı!" else "Yavaşla ve nefeslen.")
                 }
                 delay(1000)
             }
@@ -212,6 +227,7 @@ class WorkoutService : Service() {
     }
 
     private fun runLymphaticTimer() {
+        acquireWakeLock()
         timerJob?.cancel()
         timerJob = serviceScope.launch {
             while (isActive) {
@@ -277,10 +293,12 @@ class WorkoutService : Service() {
         _timerState.value = _timerState.value?.copy(isPaused = true)
         _walkingState.value = _walkingState.value?.copy(isPaused = true)
         _lymphaticState.value = _lymphaticState.value?.copy(isPaused = true)
+        releaseWakeLock()
         updateNotification("Duraklatıldı", "Devam etmek için dokunun", false)
     }
 
     private fun resumeActive() {
+        acquireWakeLock()
         _timerState.value = _timerState.value?.copy(isPaused = false)
         _walkingState.value = _walkingState.value?.copy(isPaused = false)
         _lymphaticState.value = _lymphaticState.value?.copy(isPaused = false)
@@ -308,7 +326,8 @@ class WorkoutService : Service() {
         _lymphaticState.value = null
         timerJob?.cancel()
         
-        // Bildirimi kesin olarak temizle
+        releaseWakeLock()
+
         val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         nm.cancel(notificationId)
         
@@ -338,7 +357,7 @@ class WorkoutService : Service() {
         
         if (isRunning) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                startForeground(notificationId, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+                startForeground(notificationId, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_HEALTH)
             } else {
                 startForeground(notificationId, notification)
             }
